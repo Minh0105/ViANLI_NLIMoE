@@ -1,7 +1,7 @@
 # XLM-R Large, training settings of Sec. 6.2
 experiment:
-  name: xlmr_large_paper_v3
-  description: XLM-R Base with training hyperparameters from Section 6.2; head details
+  name: xlmr_large_paper_v4
+  description: XLM-R Large with training hyperparameters from Section 6.2; head details
     not reported
 data:
   dataset_name: uitnlp/ViANLI
@@ -14,7 +14,7 @@ model:
   num_labels: 3
   pooling: cls
   dropout: 0.4
-  encoder_dropout: 0.4
+  encoder_dropout: null # XLM-R default 0.1; dropout 0.4 only in experts / head
 training:
   seed: 42
   lr: 1.0e-05
@@ -23,8 +23,8 @@ training:
   batch_size: 16
   epochs: 7
   eval_frequency: 400
-  scheduler: constant
-  warmup_ratio: 0.0
+  scheduler: "linear" # not reported
+  warmup_ratio: 0.1 # not reported
   gradient_accumulation_steps: 1
   max_grad_norm: null
   early_stopping_patience: 0
@@ -36,7 +36,7 @@ provenance:
   - CLS plus linear classification head
   - AdamW
   - encoder dropout scope
-  - constant learning rate
+  - linear learning rate, 10% warmup
   - best validation accuracy checkpoint
   - seed 42
 evaluation:

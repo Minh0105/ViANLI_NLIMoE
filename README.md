@@ -16,8 +16,9 @@ assumptions are listed in [analysis/paper_extraction.md](analysis/paper_extracti
 | `nlimoe_ste_nobalance.yaml` | ablation · B2 without balance loss |
 | `xlmr_base.yaml`, `lightweight_moe_experimental.yaml` | early experiments |
 
-Training follows Sec. 6.2: 7 epochs, batch 16, lr 1e-5, max length 256, dropout 0.4,
-validation every 400 optimizer steps.
+Training follows Sec. 6.2: 7 epochs, batch 16, lr 1e-5, max length 256, dropout 0.4 (experts/head),
+validation every 400 optimizer steps; linear schedule with 10% warmup (not reported). Earlier
+settings with dropout 0.4 inside the encoder and a constant lr are kept in `configs/v3/`.
 
 With the paper's hard mask `1(P > rho)` the complexity gate gets no gradient, so the threshold
 is never trained. B2 keeps the hard mask in the forward pass and uses the gradient of

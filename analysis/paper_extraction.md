@@ -29,13 +29,18 @@ Các mục REPORTED trong phiên bản tài liệu cũ chưa có căn cứ đã 
 
 - Exact pretrained checkpoint NLIMoE: dùng `xlm-roberta-large` là suy luận
   từ d=1024, không phải tên checkpoint được trích trực tiếp.
-- AdamW, constant LR, no warmup/clipping/early stopping, seed 42 và chọn best
-  validation accuracy là lựa chọn triển khai cho các chi tiết NOT_REPORTED.
+- AdamW, no clipping/early stopping, seed 42 và chọn best validation accuracy
+  là lựa chọn triển khai cho các chi tiết NOT_REPORTED.
 - Evaluation frequency được hiểu là số optimizer step; validation cuối run
   được thêm để đảm bảo luôn có checkpoint.
-- Dropout 0.4 được áp dụng cho expert và encoder hidden/attention dropout;
-  bài báo không giải thích phạm vi chính xác. Dense head dùng CLS/Dropout/
-  Linear là giả định giữ từ dự án, không tự coi là head tác giả.
+- Phạm vi của dropout 0.4 và scheduler không được công bố. Hai cách hiểu:
+  - v3 (`configs/v3/`): dropout 0.4 cả trong encoder (hidden/attention) và
+    expert, LR cố định, không warmup. Seed 42 trên A100: B1 và B2 đoán một
+    nhãn cho mọi câu (val acc 0.334, macro-F1 0.167), B2 test acc 0.337.
+  - v4 (`configs/`, mặc định): dropout 0.4 chỉ ở expert và head, encoder
+    giữ mặc định 0.1; LR tuyến tính với 10% warmup.
+- Dense head dùng CLS/Dropout/Linear là giả định giữ từ dự án, không tự coi
+  là head tác giả.
 - Backprop qua mask cứng không được mô tả. Bản equations dùng hard mask nên
   complexity gate không nhận gradient; không thêm straight-through ngầm.
 - Khi không chọn expert, MoE vector bằng zero để tránh NaN; đây là quy ước

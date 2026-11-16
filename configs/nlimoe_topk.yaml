@@ -1,6 +1,6 @@
 # Top-K setting reported for ViANLI (Sec. 6.2, Table 12)
 experiment:
-  name: nlimoe_paper_v3_topk
+  name: nlimoe_paper_v4_topk
   description: "ViANLI: N=5, K=4"
 data:
   dataset_name: "uitnlp/ViANLI"
@@ -12,7 +12,7 @@ model:
   num_labels: 3
   pooling: "mean"
   dropout: 0.4
-  encoder_dropout: 0.4
+  encoder_dropout: null # XLM-R default 0.1; dropout 0.4 only in experts / head
 moe:
   num_experts: 5
   expert_hidden_dim: 1024
@@ -34,8 +34,8 @@ training:
   batch_size: 16
   epochs: 7
   eval_frequency: 400
-  scheduler: "constant"
-  warmup_ratio: 0.0
+  scheduler: "linear" # not reported
+  warmup_ratio: 0.1 # not reported
   gradient_accumulation_steps: 1
   max_grad_norm: null
   early_stopping_patience: 0
@@ -46,4 +46,4 @@ evaluation:
 provenance:
   source: "https://arxiv.org/html/2406.17716v3"
   sections: "5, 6.2, Table 12"
-  assumptions: ["checkpoint identity inferred from d=1024", "encoder dropout scope", "AdamW", "constant lr", "best validation checkpoint", "seed", "auxiliary losses retained for Top-K"]
+  assumptions: ["checkpoint identity inferred from d=1024", "encoder dropout scope", "AdamW", "linear lr, 10% warmup", "best validation checkpoint", "seed", "auxiliary losses retained for Top-K"]

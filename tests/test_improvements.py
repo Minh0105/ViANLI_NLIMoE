@@ -108,15 +108,15 @@ class ImprovementTests(unittest.TestCase):
         from scripts.run_queue import is_done
         from src.utils.viz import variant_of
         finished = pd.DataFrame({'experiment_name': [
-            'xlmr_large_paper_v3_seed42_20261120_101010_000001',
-            'nlimoe_paper_v3_ste_bottleneck_dynamic_seed42_20261120_101010_000002']})
+            'xlmr_large_paper_v4_seed42_20261120_101010_000001',
+            'nlimoe_paper_v4_ste_bottleneck_dynamic_seed42_20261120_101010_000002']})
         self.assertTrue(is_done('B0', 42, finished))
         self.assertFalse(is_done('B0', 123, finished))
         self.assertTrue(is_done('B3', 42, finished))
         self.assertFalse(is_done('B2', 42, finished))
         self.assertEqual(variant_of(finished['experiment_name'][1]), 'B3')
-        self.assertEqual(variant_of('nlimoe_paper_v3_ste_dynamic_seed7_20261120_101010_000003'), 'B2')
-        self.assertEqual(variant_of('nlimoe_paper_v3_dynamic_dynamic_seed7_20261120_101010_000004'), 'B1')
+        self.assertEqual(variant_of('nlimoe_paper_v4_ste_dynamic_seed7_20261120_101010_000003'), 'B2')
+        self.assertEqual(variant_of('nlimoe_paper_v4_dynamic_dynamic_seed7_20261120_101010_000004'), 'B1')
 
 
 if __name__ == '__main__':
