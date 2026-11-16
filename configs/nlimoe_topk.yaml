@@ -1,0 +1,49 @@
+# Published best Top-K configuration for ViANLI (Section 6.2 / Table 12).
+experiment:
+  name: nlimoe_paper_v3_topk
+  description: "ViANLI: N=5, K=4"
+data:
+  dataset_name: "uitnlp/ViANLI"
+  max_length: 256
+model:
+  architecture: "paper_nlimoe_v3"
+  backbone: "xlm-roberta-large"
+  expected_hidden_size: 1024
+  num_labels: 3
+  pooling: "mean"
+  dropout: 0.4
+  encoder_dropout: 0.4
+moe:
+  num_experts: 5
+  expert_hidden_dim: 1024
+  router_type: "linear"
+  routing_type: "top_k"
+  top_k: 4
+  threshold: 0.1
+  gamma: 0.1
+  dynamic_loss_weight: 0.001
+  balance_loss_weight: 0.01
+  threshold_gradient: "hard"
+  empty_selection_policy: "zero"
+training:
+  seed: 42 # NOT_REPORTED
+  lr_backbone: 1.0e-5
+  lr_moe: 1.0e-5
+  weight_decay: 0.0
+  adam_epsilon: 1.0e-8
+  batch_size: 16
+  epochs: 7
+  eval_frequency: 400
+  scheduler: "constant"
+  warmup_ratio: 0.0
+  gradient_accumulation_steps: 1
+  max_grad_norm: null
+  early_stopping_patience: 0
+evaluation:
+  primary_metric: "accuracy"
+  secondary_metric: "macro_f1"
+  save_best_checkpoint: true
+provenance:
+  source: "https://arxiv.org/html/2406.17716v3"
+  sections: "5, 6.2, Table 12"
+  assumptions: ["checkpoint identity inferred from d=1024", "encoder dropout scope", "AdamW", "constant lr", "best validation checkpoint", "seed", "auxiliary losses retained for Top-K"]

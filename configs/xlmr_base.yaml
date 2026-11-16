@@ -1,0 +1,41 @@
+experiment:
+  name: xlmr_base_paper_v3
+  description: "XLM-R Base with training hyperparameters from Section 6.2; head details not reported"
+
+data:
+  dataset_name: "uitnlp/ViANLI"
+  max_length: 256
+  premise_col: "premise"
+  hypothesis_col: "hypothesis"
+  label_col: "label"
+
+model:
+  backbone: "xlm-roberta-base"
+  num_labels: 3
+  pooling: "cls"
+  dropout: 0.4
+  encoder_dropout: 0.4 # Applying reported dropout inside encoder is an assumption.
+
+training:
+  seed: 42
+  lr: 1.0e-5
+  weight_decay: 0.0
+  adam_epsilon: 1.0e-8
+  batch_size: 16
+  epochs: 7
+  eval_frequency: 400
+  scheduler: "constant" # NOT_REPORTED
+  warmup_ratio: 0.0
+  gradient_accumulation_steps: 1
+  max_grad_norm: null # NOT_REPORTED
+  early_stopping_patience: 0 # NOT_REPORTED
+
+provenance:
+  source: "https://arxiv.org/html/2406.17716v3"
+  reported: "Section 6.2: max_length, lr, eval_frequency, batch_size, weight_decay, epsilon, dropout, epochs"
+  assumptions: ["CLS plus linear classification head", "AdamW", "encoder dropout scope", "constant learning rate", "best validation accuracy checkpoint", "seed 42"]
+
+evaluation:
+  primary_metric: "accuracy"
+  secondary_metric: "macro_f1"
+  save_best_checkpoint: true

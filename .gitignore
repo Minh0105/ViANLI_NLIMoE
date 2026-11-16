@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv*/
+
+# PyCharm
+.idea/workspace.xml
+.idea/usage.statistics.xml
+.idea/shelf/
+
+# Machine Learning Checkpoints & Weights
+checkpoints/*.pt
+checkpoints/*.bin
+*.pth
+
+# Large logs & caches
+logs/*.log
+.cache/
+.pytest_cache/
+
+# --- Added for GitHub / Colab ---
+# Virtual env, model weights and run artefacts that can be regenerated
+.venv/
+checkpoints/
+logs/
+.artifacts/
+.idea/
+
+# Course documents and drafts (kept locally, not part of the code release)
+*.doc
+*.docx
+*.pptx
+deliverables/
+learning/
+
+# Experiment outputs live on Google Drive / local disk, never in git:
+# a `git pull` on Colab must not overwrite results produced there.
+results/**
+!results/**/
+!results/**/.gitkeep
+predictions/*
+!predictions/.gitkeep
+reports/figures/
+reports/tables/
