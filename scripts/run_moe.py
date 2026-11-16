@@ -169,6 +169,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     precision = resolve_precision(args.precision or cfg["training"].get("precision", "fp32"), device)
     print(exp_name)
+    print(f"config {args.config} | encoder_dropout={cfg['model'].get('encoder_dropout')} | "
+          f"scheduler={cfg['training'].get('scheduler')} | warmup_ratio={cfg['training'].get('warmup_ratio')}")
     print(f"Routing: {routing_type} | Experts: {num_experts} | Seed: {seed} | Device: {device} | "
           f"Batch: {batch_size} x accum {grad_accum} | Precision: {precision} | Dynamic padding: {dynamic_padding}")
 

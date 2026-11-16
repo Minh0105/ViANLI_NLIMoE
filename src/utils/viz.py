@@ -1,5 +1,6 @@
 """Plots for training logs and results."""
 import json
+import os
 import math
 import re
 import time
@@ -82,6 +83,11 @@ def _fmt_duration(seconds):
     return f"{seconds // 3600}h{seconds % 3600 // 60:02d}m"
 
 
+def version_of(experiment_name):
+    match = re.search(r"_v(\d+)_", str(experiment_name))
+    return f"v{match.group(1)}" if match else "?"
+
+
 def progress_text(name, history):
     if history.empty:
         return f"{name}: chưa có dữ liệu"
@@ -93,7 +99,7 @@ def progress_text(name, history):
     step = int(train["step"].iloc[-1]) if not train.empty else 0
     elapsed = history["time"].iloc[-1] - history["time"].iloc[0]
     eta = elapsed / step * (total - step) if step else float("nan")
-    parts = [f"{name}", f"bước {step}/{total} ({100 * step / max(1, total):.0f}%)",
+    parts = [f"[{version_of(name)}] {name}", f"bước {step}/{total} ({100 * step / max(1, total):.0f}%)",
              f"đã chạy {_fmt_duration(elapsed)}"]
     if not test.empty:
         parts.append(f"XONG · test acc {test['accuracy'].iloc[-1]:.4f}")
@@ -189,31 +195,60 @@ def queue_table(project=PROJECT):
         end = frame["finished"] if "finished" in frame else pd.Series(np.nan, index=frame.index)
         end = end.fillna(now)
         frame["thời gian"] = [(_fmt_duration(e - s) if not pd.isna(s) else "") for s, e in zip(frame["started"], end)]
-    keep = [c for c in ["variant", "seed", "description", "state", "thời gian"] if c in frame]
+    keep = [c for c in ["variant", "seed", "settings", "description", "state", "thời gian"] if c in frame]
     return frame[keep]
 
 
+def queue_alive(project=PROJECT):
+    try:
+        os.kill(int((Path(project) / "logs" / "queue.pid").read_text()), 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def current_run(project=PROJECT):
+    """(status of the running item, its history) or (None, None)."""
+    path = Path(project) / "logs" / "queue_status.json"
+    if not path.exists():
+        return None, None
+    item = json.loads(path.read_text(encoding="utf-8")).get("current")
+    if not item or item.get("state") != "running":
+        return None, None
+    files = [p for p in (Path(project) / "logs").glob("*.jsonl") if p.stat().st_mtime >= item.get("started", 0)]
+    if not files:
+        return item, None
+    newest = max(files, key=lambda p: p.stat().st_mtime)
+    return item, (newest.stem, load_history(newest))
+
+
 def monitor(refresh_seconds=60, project=PROJECT, stop_when_idle=True):
-    """Refresh the dashboard of the latest run until the queue finishes."""
+    """Refresh the dashboard of the running job until the queue finishes."""
     from IPython.display import clear_output, display
     try:
         while True:
-            name, history = latest_history(project)
             clear_output(wait=True)
             table = queue_table(project)
             if not table.empty:
                 display(table)
-            if name is None:
-                print("Chưa có lần chạy nào trong logs/.")
-            else:
-                plot_live(name, history)
-                plt.show()
             status_path = Path(project) / "logs" / "queue_status.json"
             if stop_when_idle and status_path.exists():
                 status = json.loads(status_path.read_text(encoding="utf-8"))
-                if all(item["state"] in ("done", "failed") for item in status["queue"]):
+                if all(entry["state"] in ("done", "failed") for entry in status["queue"]):
                     print("Hàng đợi đã chạy xong.")
                     return
+            alive = queue_alive(project)
+            item, run = current_run(project)
+            if not alive:
+                print("Hàng đợi không chạy. Chạy ô khởi động hàng đợi; nếu lỗi, xem logs/queue.out.")
+                return
+            if item is None:
+                print("Hàng đợi đang khởi động...")
+            elif run is None:
+                print(f"{item['variant']} seed {item['seed']}: đang tải mô hình và dữ liệu...")
+            else:
+                plot_live(*run)
+                plt.show()
             time.sleep(refresh_seconds)
     except KeyboardInterrupt:
         print("Đã dừng theo dõi (huấn luyện vẫn tiếp tục chạy nền).")

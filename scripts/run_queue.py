@@ -41,6 +41,19 @@ def experiment_prefix(variant):
     return prefix or fallback
 
 
+def settings(variant):
+    """Short description of the training settings, e.g. 'v4 · encoder dropout 0.1 · linear lr, 10% warmup'."""
+    import yaml
+    cfg = yaml.safe_load((PROJECT / VARIANTS[variant][2]).read_text(encoding="utf-8"))
+    version = re.search(r"_v(\d+)", cfg["experiment"]["name"])
+    encoder = cfg["model"].get("encoder_dropout")
+    training = cfg["training"]
+    lr = (f"linear lr, {training.get('warmup_ratio', 0):.0%} warmup" if training.get("scheduler") == "linear"
+          else "constant lr")
+    return " · ".join([f"v{version.group(1)}" if version else "?",
+                       f"encoder dropout {encoder if encoder is not None else '0.1'}", lr])
+
+
 def finished_runs(summary_csv=PROJECT / "results" / "summary.csv"):
     if not summary_csv.exists():
         return pd.DataFrame(columns=["experiment_name", "seed"])
@@ -80,13 +93,13 @@ def main():
     logs.mkdir(exist_ok=True)
     status_path = logs / "queue_status.json"
     finished = finished_runs()
-    queue = [{"variant": v, "seed": s, "description": VARIANTS[v][0],
+    queue = [{"variant": v, "seed": s, "description": VARIANTS[v][0], "settings": settings(v),
               "state": "done" if is_done(v, s, finished) else "pending"} for v, s in plan]
-    write_status(status_path, queue)
     for item in queue:
-        print(f"  {item['variant']:7s} seed {item['seed']:<5d} {item['state']:8s} {item['description']}")
+        print(f"  {item['variant']:7s} seed {item['seed']:<5d} {item['state']:8s} {item['settings']:48s} {item['description']}")
     if args.dry_run:
         return
+    write_status(status_path, queue)
 
     for item in queue:
         if item["state"] == "done":
