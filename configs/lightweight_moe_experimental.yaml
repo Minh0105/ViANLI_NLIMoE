@@ -1,4 +1,4 @@
-# Prototype; not a faithful reproduction of the paper.
+# early prototype, not the paper model
 experiment:
   name: lightweight_moe_experimental
   description: "Smaller MLP experts, straight-through threshold gradients, sparse inference"

@@ -7,11 +7,7 @@ def compute_nli_metrics(
     y_pred: Union[List[int], np.ndarray],
     label_names: List[str] = None
 ) -> Dict[str, float]:
-    """
-    Tính toán các chỉ số đánh giá chuẩn cho bài toán NLI 3 nhãn.
-    Primary metric: Accuracy
-    Secondary metric: Macro-F1
-    """
+    """Accuracy, macro-F1 and per-class report."""
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
 

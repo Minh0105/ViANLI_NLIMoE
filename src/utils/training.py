@@ -1,9 +1,4 @@
-"""Shared training loop with validation cadence in optimizer steps.
-
-Supports mixed precision (bf16 / fp16 autocast) and gradient accumulation, so the
-paper's effective batch size can be kept on GPUs with less memory, e.g.
-batch_size 8 x gradient_accumulation_steps 2 = effective batch 16.
-"""
+"""Training loop with AMP, gradient accumulation and JSONL logging."""
 import contextlib
 import json
 import math
@@ -16,7 +11,7 @@ PRECISIONS = ('fp32', 'bf16', 'fp16', 'auto')
 
 
 def resolve_precision(precision, device):
-    """Map 'auto' to bf16 when the GPU supports it, else fp16; CPU always uses fp32."""
+    """'auto' -> bf16 if supported, else fp16; fp32 on CPU."""
     precision = (precision or 'fp32').lower()
     if precision not in PRECISIONS:
         raise ValueError(f"precision must be one of {PRECISIONS}, got {precision!r}")
@@ -30,7 +25,7 @@ def resolve_precision(precision, device):
 
 
 def autocast_context(device, precision):
-    """Autocast context for forward passes; a no-op for fp32."""
+    """autocast for bf16/fp16, no-op for fp32."""
     if precision == 'fp32':
         return contextlib.nullcontext()
     dtype = torch.bfloat16 if precision == 'bf16' else torch.float16
@@ -42,7 +37,7 @@ def optimizer_steps_per_epoch(loader, accumulation_steps):
 
 
 def append_history(path, record):
-    """Append one JSON line to a run's history file (read by the Colab monitor)."""
+    """Append one JSON record to a history file."""
     if not path:
         return
     Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -60,9 +55,7 @@ def _gpu_memory_gb(device):
 def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
                           training, evaluate, checkpoint_path, sanity=False,
                           history_path=None, grad_probe=None):
-    """`history_path`: JSONL file receiving train/val events.
-    `grad_probe(model) -> dict`: extra gradient statistics, measured right
-    before each logged optimizer step (e.g. the norm of dL/dw_c)."""
+    """Train for `epochs`, validate every `eval_frequency` optimizer steps, keep the best checkpoint."""
     best = None
     stale = 0
     global_step = 0
@@ -110,7 +103,7 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
         optimizer.zero_grad(set_to_none=True)
         num_batches = len(loader)
         for index, batch in enumerate(tqdm(loader, desc=f"Epoch {epoch}/{epochs}")):
-            # The last group of an epoch may hold fewer than `accumulation` batches.
+            # last group of an epoch can be shorter
             group_start = (index // accumulation) * accumulation
             group_size = min(accumulation, num_batches - group_start)
             with autocast_context(device, precision):
@@ -165,7 +158,6 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
                 if validate():
                     return best
         print(f"Epoch {epoch}: Train Loss: {total_loss / num_batches:.4f}")
-        # Final validation also covers datasets shorter than eval_frequency.
         if sanity or frequency == 0 or (epoch == epochs and global_step % frequency != 0):
             if validate():
                 return best

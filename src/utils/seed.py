@@ -4,9 +4,7 @@ import numpy as np
 import torch
 
 def set_seed(seed: int = 42) -> None:
-    """
-    Cố định hoàn toàn random seed cho mọi thành phần để đảm bảo tính tái lập (Reproducibility).
-    """
+    """Seed python, numpy and torch."""
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
     np.random.seed(seed)

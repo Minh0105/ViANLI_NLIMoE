@@ -115,7 +115,7 @@ def evaluate_moe(model, dataloader, device, routing_mode=None, threshold=None):
 
 
 def save_routing_per_sample(path, bundle):
-    """One row per test sample: correctness, C, rho, #experts, mask and weight per expert."""
+    """Per-sample routing on the test set."""
     uids, golds, preds, _, per_sample = bundle
     mask, weights = per_sample["mask"].numpy(), per_sample["weights"].numpy()
     frame = pd.DataFrame({"uid": uids, "gold": golds, "pred": preds,
@@ -129,7 +129,7 @@ def save_routing_per_sample(path, bundle):
         frame[f"weight_{i}"] = weights[:, i]
     os.makedirs(os.path.dirname(path), exist_ok=True)
     frame.to_csv(path, index=False, encoding="utf-8")
-    print(f"[Logging] Saved per-sample routing to {path}")
+    print(f"saved {path}")
 
 def main():
     args = parse_args()
@@ -168,7 +168,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     precision = resolve_precision(args.precision or cfg["training"].get("precision", "fp32"), device)
-    print(f"=== Starting Experiment: {exp_name} ===")
+    print(exp_name)
     print(f"Routing: {routing_type} | Experts: {num_experts} | Seed: {seed} | Device: {device} | "
           f"Batch: {batch_size} x accum {grad_accum} | Precision: {precision} | Dynamic padding: {dynamic_padding}")
 
@@ -190,14 +190,14 @@ def main():
     test_out["loss"].backward()
     router_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.router.parameters())
     expert_grad = any(p.grad is not None and p.grad.abs().sum() > 0 for p in model.experts.parameters())
-    print(f"[Sanity Check Gradients] Router Grad Exists: {router_grad} | Expert Grad Exists: {expert_grad}")
+    print(f"grad check: router={router_grad} experts={expert_grad}")
     if paper_mode and routing_type == "dynamic":
         gate_grad = sum(float(p.grad.abs().sum()) for p in model.router.complexity_gate.parameters() if p.grad is not None)
-        print(f"[Complexity gate] |dL/dw_c| = {gate_grad:.3e} ({'STE' if ste else 'hard mask'})")
+        print(f"|dL/dw_c| = {gate_grad:.3e}")
         if ste and gate_grad == 0:
             raise RuntimeError("STE is enabled but the complexity gate received no gradient")
         if not ste:
-            print("[Paper limitation] Hard mask Eq. (6) gives no gradient to complexity_gate; no estimator is reported.")
+            print("hard mask: complexity gate gets no gradient")
     if routing_type == "dynamic" and not paper_mode:
         missing = [n for n, p in model.router.dynamic_thresh_head.named_parameters() if p.grad is None]
         if missing:
@@ -232,7 +232,7 @@ def main():
 
     def validation():
         metrics, routing, _ = evaluate_moe(model, val_loader, device, routing_mode=routing_type, threshold=threshold)
-        print(f"  Avg Experts/Sample: {routing['avg_experts_per_sample']:.2f}")
+        print(f"  experts/sample {routing['avg_experts_per_sample']:.2f}")
         return metrics
 
     cfg['training'].update(seed=seed, batch_size=batch_size, epochs=epochs,
@@ -256,14 +256,14 @@ def main():
 
     train_time = round(time.time() - start_time, 2)
 
-    print("\n--- Evaluating Best NLIMoE Model on Test Set ---")
+    print("\ntest set:")
     model.load_state_dict(torch.load(best_checkpoint_path, map_location=device, weights_only=True))
     inf_start = time.time()
     with autocast_context(device, precision):
         test_metrics, test_routing, test_bundle = evaluate_moe(model, test_loader, device, routing_mode=routing_type, threshold=threshold)
     inference_time = round(time.time() - inf_start, 2)
 
-    print(f"Test Acc: {test_metrics['accuracy']:.4f} | Test Macro-F1: {test_metrics['macro_f1']:.4f}")
+    print(f"acc {test_metrics['accuracy']:.4f}  macro-F1 {test_metrics['macro_f1']:.4f}")
 
     pred_path = os.path.join(project_dir, "predictions", f"{exp_name}.csv")
     uids, golds, preds, probs, _ = test_bundle
@@ -307,7 +307,7 @@ def main():
                                   "avg_experts": test_routing["avg_experts_per_sample"], "train_time": train_time,
                                   "inference_time": inference_time, "gpu_mem_gb": peak_mem,
                                   "expert_params": sum(p.numel() for p in model.experts.parameters())})
-    print(f"=== Experiment Completed Successfully: {exp_name} ===")
+    print(f"done: {exp_name}")
 
 if __name__ == "__main__":
     main()

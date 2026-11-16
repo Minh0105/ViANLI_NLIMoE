@@ -4,15 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class NLIMoERouter(nn.Module):
-    """
-    Router module cho mô hình NLIMoE.
-    Tách bạch logic định tuyến khỏi các chuyên gia (Experts).
-    Hỗ trợ 4 biến thể:
-      - Top-K routing
-      - Static Threshold routing (score > tau)
-      - Dynamic Threshold routing
-      - Dense routing (sanity check)
-    """
+    """Top-k, static, dynamic or dense routing."""
     def __init__(
         self,
         input_dim: int = 768,
@@ -105,8 +97,7 @@ class NLIMoERouter(nn.Module):
                 top1_idx = raw_probs[empty_samples].argmax(dim=-1, keepdim=True)
                 selected_mask[empty_samples] = selected_mask[empty_samples].scatter(1, top1_idx, True)
 
-            # Experimental estimator: hard choices in forward, sigmoid gradients
-            # in backward. This is not claimed to reproduce the paper's optimizer.
+            # straight-through: hard mask forward, sigmoid gradient backward
             selection = selected_mask.float()
             if self.training and self.threshold_gradient == "straight_through":
                 soft_selection = torch.sigmoid(

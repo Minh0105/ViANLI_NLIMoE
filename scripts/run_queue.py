@@ -1,11 +1,6 @@
-"""Run a queue of experiments one after another, skipping runs already in results/summary.csv.
+"""Run experiments in sequence, skipping (variant, seed) pairs already in results/summary.csv.
 
-Designed for Google Colab: if the runtime disconnects, start the queue again and it
-continues with the first unfinished (variant, seed). Progress is written to
-logs/queue_status.json and each run's stdout to logs/<variant>_seed<seed>.out.
-
-Example:
-    python scripts/run_queue.py --variants B0 B1 B2 B3 --seeds 42 123 2026 --precision auto --batch_size 8 --grad_accum 2
+    python scripts/run_queue.py --variants B0 B1 B2 B3 --seeds 42 123 2026
 """
 import argparse
 import json
@@ -20,7 +15,7 @@ import pandas as pd
 
 PROJECT = Path(__file__).resolve().parents[1]
 
-# name -> (description, script, config, experiment-name prefix written to summary.csv)
+# variant -> (description, script, config, name prefix)
 VARIANTS = {
     "B0": ("XLM-R Large (no MoE)", "scripts/run_xlmr.py", "configs/xlmr_large.yaml", "xlmr_large_paper_v3"),
     "B1": ("NLIMoE, paper (hard mask)", "scripts/run_moe.py", "configs/nlimoe_dynamic.yaml", "nlimoe_paper_v3_dynamic_dynamic"),
@@ -32,7 +27,7 @@ VARIANTS = {
 
 
 def experiment_prefix(variant):
-    """Prefix as written by the run scripts (read from the config so renames stay in sync)."""
+    """Experiment-name prefix used by the run scripts."""
     import yaml
     _, script, config, fallback = VARIANTS[variant]
     cfg = yaml.safe_load((PROJECT / config).read_text(encoding="utf-8"))
@@ -114,7 +109,7 @@ def main():
         write_status(status_path, queue)
         print(f"<<< {variant} seed {seed}: {item['state']} (exit {code})", flush=True)
         if code != 0:
-            print(f"    See {out_path} for the error. Continuing with the next run.")
+            print(f"    log: {out_path}")
     write_status(status_path, queue)
     print("\nQueue finished.")
 

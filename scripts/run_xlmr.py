@@ -104,7 +104,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     precision = resolve_precision(args.precision or cfg["training"].get("precision", "fp32"), device)
-    print(f"=== Starting Experiment: {exp_name} ===")
+    print(exp_name)
     print(f"Device: {device} | Seed: {seed} | Backbone: {backbone} | Batch: {batch_size} x accum {grad_accum} | "
           f"Epochs: {epochs} | Precision: {precision} | Dynamic padding: {dynamic_padding}")
 
@@ -171,20 +171,19 @@ def main():
     train_time = round(time.time() - start_time, 2)
 
     if args.overfit_sanity_check:
-        # A memorization check is not a test benchmark and must not pollute it.
         print(f"[Sanity Result] Passed: {sanity_passed} | Best train-subset accuracy: {best_val_acc:.4f}")
         if not sanity_passed:
             raise RuntimeError("Overfit sanity check did not reach 95% training accuracy")
         return
 
-    print("\n--- Evaluating Best Model on Test Set ---")
+    print("\ntest set:")
     model.load_state_dict(torch.load(best_checkpoint_path, map_location=device, weights_only=True))
     inf_start = time.time()
     with autocast_context(device, precision):
         test_metrics, test_preds_bundle = evaluate(model, test_loader, device)
     inference_time = round(time.time() - inf_start, 2)
 
-    print(f"Test Accuracy: {test_metrics['accuracy']:.4f} | Test Macro-F1: {test_metrics['macro_f1']:.4f}")
+    print(f"acc {test_metrics['accuracy']:.4f}  macro-F1 {test_metrics['macro_f1']:.4f}")
 
     pred_path = os.path.join(project_dir, "predictions", f"{exp_name}.csv")
     uids, golds, preds, probs = test_preds_bundle
@@ -226,7 +225,7 @@ def main():
     append_to_summary(record, summary_csv)
     append_history(history_path, {"type": "test", "accuracy": test_metrics["accuracy"], "macro_f1": test_metrics["macro_f1"],
                                   "train_time": train_time, "inference_time": inference_time, "gpu_mem_gb": peak_mem})
-    print(f"=== Experiment Completed Successfully: {exp_name} ===")
+    print(f"done: {exp_name}")
 
 if __name__ == "__main__":
     main()

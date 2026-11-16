@@ -11,25 +11,25 @@ data:
 
 model:
   architecture: "paper_nlimoe_v3"
-  backbone: "xlm-roberta-large" # Inferred from explicitly reported d=1024.
+  backbone: "xlm-roberta-large" # d=1024 in the paper
   expected_hidden_size: 1024
   num_labels: 3
   pooling: "mean"
   dropout: 0.4
-  encoder_dropout: 0.4 # Scope of reported dropout is an implementation assumption.
+  encoder_dropout: 0.4 # assumption
 
 moe:
   num_experts: 7
   expert_hidden_dim: 1024
   router_type: "linear"
   routing_type: "dynamic"
-  top_k: 4 # Inactive for dynamic; use nlimoe_topk.yaml for published Top-K.
+  top_k: 4 # unused for dynamic routing
   threshold: 0.1
   gamma: 0.1
   dynamic_loss_weight: 0.001
   balance_loss_weight: 0.01
-  threshold_gradient: "hard" # Literal Eq. (6); no complexity-head gradient.
-  empty_selection_policy: "zero" # Not reported; numerical convention.
+  threshold_gradient: "hard"
+  empty_selection_policy: "zero" # not reported
 
 training:
   seed: 42
@@ -40,11 +40,11 @@ training:
   batch_size: 16
   epochs: 7
   eval_frequency: 400
-  scheduler: "constant" # NOT_REPORTED: do not add an unreported decay schedule.
+  scheduler: "constant" # not reported
   warmup_ratio: 0.0
   gradient_accumulation_steps: 1
-  max_grad_norm: null # NOT_REPORTED
-  early_stopping_patience: 0 # NOT_REPORTED; run the reported 7 epochs.
+  max_grad_norm: null # not reported
+  early_stopping_patience: 0 # not reported
 
 provenance:
   source: "https://arxiv.org/html/2406.17716v3"

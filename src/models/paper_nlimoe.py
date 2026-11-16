@@ -1,10 +1,8 @@
-"""NLIMoE equations (2)-(16), arXiv:2406.17716v3, Section 5.
+"""NLIMoE (arXiv:2406.17716v3, Sec. 5, Eq. 2-16).
 
-Literal hard masking has no gradient to the complexity gate. No surrogate
-gradient is silently introduced: the straight-through estimator (STE) and the
-bottleneck experts are the group's proposed improvements (B2, B3) and are only
-active when enabled explicitly in the config. Empty selections return a zero MoE
-vector (numerical convention, not specified by the paper).
+threshold_gradient='straight_through' and expert_type='bottleneck' are our
+modifications; the defaults follow the paper. An empty selection gives a zero
+MoE vector (not specified in the paper).
 """
 import torch
 from torch import nn
@@ -51,9 +49,7 @@ class PaperRouter(nn.Module):
             raise ValueError(f"Unsupported routing mode: {mode}")
         selection = mask.to(probabilities.dtype)
         if mode == "dynamic" and self.training and self.threshold_gradient == "straight_through":
-            # B2 (STE): forward value = hard mask (identical to the paper);
-            # backward uses d/d(rho) of sigmoid((P - rho) / T), so the
-            # complexity gate receives a gradient.
+            # straight-through estimator: forward = hard mask, backward = d sigmoid((P - rho) / T)
             soft = torch.sigmoid((probabilities - threshold) / self.threshold_temperature)
             selection = selection + (soft - soft.detach())
         masked = probabilities * selection
@@ -68,9 +64,7 @@ class PaperRouter(nn.Module):
 
 
 def build_expert(hidden_size, dropout=0.4, expert_type="linear", bottleneck_dim=256):
-    """Paper expert: Linear(d, d) -> Dropout -> ReLU.
-    B3 bottleneck expert: Linear(d, r) -> ReLU -> Linear(r, d) -> Dropout -> ReLU,
-    keeping the paper's output stage so only the inner mapping changes."""
+    """linear: Linear(d,d)-Dropout-ReLU (paper); bottleneck: Linear(d,r)-ReLU-Linear(r,d)-Dropout-ReLU."""
     if expert_type == "linear":
         return nn.Sequential(nn.Linear(hidden_size, hidden_size), nn.Dropout(dropout), nn.ReLU())
     if expert_type == "bottleneck":
@@ -99,7 +93,6 @@ class PaperExpertLayer(nn.Module):
             rows = selected_mask[:, index].nonzero(as_tuple=True)[0]
             output = torch.zeros_like(x)
             if rows.numel():
-                # Under autocast the expert may return bf16/fp16 while x is fp32.
                 output = output.index_copy(0, rows, expert(x.index_select(0, rows)).to(output.dtype))
             outputs.append(output)
         return torch.stack(outputs, dim=1)
@@ -135,11 +128,10 @@ class PaperNLIMoEModel(nn.Module):
                 routing_mode_override=None, threshold_override=None):
         hidden = self.encoder(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
         mask = attention_mask.unsqueeze(-1).to(hidden.dtype)
-        # Include real special tokens, exclude padding.
+        # Eq. 2: mean over non-padding tokens
         pooled = (hidden * mask).sum(1) / mask.sum(1).clamp_min(1)
         routed = self.router(pooled, routing_mode_override, threshold_override)
-        # STE needs every expert's output during training: an unselected expert
-        # can only learn to be switched on if its contribution is computed.
+        # with STE, unselected experts also need outputs to get a gradient
         ste_training = self.training and self.router.threshold_gradient == "straight_through"
         expert_vectors = self.experts(pooled, None if ste_training else routed["selected_mask"])
         combined = (expert_vectors * routed["routing_weights"].unsqueeze(-1)).sum(1)

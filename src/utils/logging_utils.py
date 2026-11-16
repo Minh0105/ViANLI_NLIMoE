@@ -6,9 +6,7 @@ import pandas as pd
 SUMMARY_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "results", "summary.csv")
 
 def append_to_summary(record: Dict[str, Any], csv_path: str = None) -> None:
-    """
-    Ghi một dòng kết quả thực nghiệm vào summary.csv (19 cột chuẩn).
-    """
+    """Append one row to results/summary.csv."""
     if csv_path is None:
         csv_path = SUMMARY_CSV_PATH
 
@@ -38,10 +36,7 @@ def save_predictions(
     probabilities: List[List[float]],
     label_map: Dict[int, str] = None
 ) -> None:
-    """
-    Lưu dự đoán ra file CSV theo chuẩn:
-    uid, gold_label, pred_label, prob_entailment, prob_neutral, prob_contradiction
-    """
+    """Write test predictions and class probabilities to CSV."""
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     records = []
     for idx, (uid, gold, pred, probs) in enumerate(zip(uids, gold_labels, pred_labels, probabilities)):

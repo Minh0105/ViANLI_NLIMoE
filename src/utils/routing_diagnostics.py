@@ -8,14 +8,7 @@ def compute_routing_diagnostics(
     labels: torch.Tensor = None,
     label_names: List[str] = None
 ) -> Dict[str, Any]:
-    """
-    Tính toán 4 chỉ số chẩn đoán định tuyến bắt buộc cho MoE:
-    1. Expert Usage (%)
-    2. Collapse Detection
-    3. Average Experts Per Sample
-    4. Router Entropy
-    5. Expert Distribution theo nhãn NLI
-    """
+    """Expert usage, collapse flag, experts per sample, routing entropy, usage per label."""
     if isinstance(routing_weights, torch.Tensor):
         routing_weights = routing_weights.detach().cpu().numpy()
     if isinstance(selected_mask, torch.Tensor):

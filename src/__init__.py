@@ -1,3 +1,1 @@
-"""
-ViANLI NLIMoE - Core source code package.
-"""
+"""ViANLI / NLIMoE."""

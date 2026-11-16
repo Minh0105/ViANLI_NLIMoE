@@ -4,9 +4,7 @@ import torch.nn as nn
 from transformers import AutoModel, AutoConfig
 
 class XLMRobertaNLI(nn.Module):
-    """
-    Dense Baseline: XLM-RoBERTa cho bài toán Vietnamese NLI 3 nhãn.
-    """
+    """XLM-R encoder with a linear classification head."""
     def __init__(
         self,
         backbone_name: str = "xlm-roberta-base",

@@ -1,4 +1,4 @@
-# Optional XLM-R Large baseline; same published training settings as Base.
+# XLM-R Large, training settings of Sec. 6.2
 experiment:
   name: xlmr_large_paper_v3
   description: XLM-R Base with training hyperparameters from Section 6.2; head details

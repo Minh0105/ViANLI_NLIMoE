@@ -1,11 +1,4 @@
-"""Charts for monitoring training and analysing results (used by the Colab notebook).
-
-All functions read the files written by the run scripts:
-  logs/<experiment>.jsonl                          training history (train / val / test events)
-  results/summary.csv                              one row per finished run
-  predictions/<experiment>.csv                     test predictions
-  results/routing_stats/<experiment>_per_sample.csv  routing per test sample (MoE runs)
-"""
+"""Plots for training logs and results."""
 import json
 import math
 import re
@@ -33,7 +26,7 @@ PAPER = {"B0": 0.455, "B1": 0.473}
 
 
 def _prefixes():
-    # Longest prefix first so "..._ste_bottleneck" is not matched as "..._ste".
+    # longest prefix first
     import sys
     sys.path.insert(0, str(PROJECT))
     from scripts.run_queue import VARIANTS, experiment_prefix
@@ -53,8 +46,6 @@ def seed_of(experiment_name):
     return int(match.group(1)) if match else None
 
 
-# ----------------------------------------------------------------------------- loading
-
 def load_history(path):
     rows = []
     for line in Path(path).read_text(encoding="utf-8").splitlines():
@@ -62,12 +53,12 @@ def load_history(path):
             try:
                 rows.append(json.loads(line))
             except json.JSONDecodeError:
-                pass  # a line may be half-written while training is running
+                pass  # partially written line
     return pd.DataFrame(rows)
 
 
 def all_histories(project=PROJECT):
-    """{experiment_name: DataFrame} for every history file in logs/."""
+    """Histories of all runs in logs/."""
     return {p.stem: load_history(p) for p in sorted((Path(project) / "logs").glob("*.jsonl"))}
 
 
@@ -85,8 +76,6 @@ def load_summary(project=PROJECT):
     frame["variant"] = frame["experiment_name"].map(variant_of)
     return frame[frame["variant"].notna()]
 
-
-# ----------------------------------------------------------------------------- live monitor
 
 def _fmt_duration(seconds):
     seconds = int(max(0, seconds))
@@ -116,7 +105,7 @@ def progress_text(name, history):
 
 
 def plot_live(name, history, figsize=(16, 8)):
-    """2x3 dashboard for one run: loss, validation, routing, complexity C, gradient of w_c, GPU memory."""
+    """Loss, validation, routing, C/rho, grad of w_c and GPU memory for one run."""
     fig, axes = plt.subplots(2, 3, figsize=figsize)
     fig.suptitle(progress_text(name, history), fontsize=11, ha="left", x=0.01)
     train = history[history["type"] == "train"] if not history.empty else history
@@ -205,7 +194,7 @@ def queue_table(project=PROJECT):
 
 
 def monitor(refresh_seconds=60, project=PROJECT, stop_when_idle=True):
-    """Redraw the dashboard of the newest run every `refresh_seconds` (stop with the ■ button)."""
+    """Refresh the dashboard of the latest run until the queue finishes."""
     from IPython.display import clear_output, display
     try:
         while True:
@@ -230,10 +219,8 @@ def monitor(refresh_seconds=60, project=PROJECT, stop_when_idle=True):
         print("Đã dừng theo dõi (huấn luyện vẫn tiếp tục chạy nền).")
 
 
-# ----------------------------------------------------------------------------- results
-
 def results_table(summary):
-    """Mean ± std over seeds for each variant."""
+    """Mean and std over seeds per variant."""
     if summary.empty:
         return pd.DataFrame()
     rows = []
@@ -255,7 +242,7 @@ def results_table(summary):
 
 
 def plot_results_bar(summary, figsize=(10, 5)):
-    """Test accuracy per variant: bar = mean, dots = individual seeds, error bar = std, ★ = paper."""
+    """Test accuracy per variant (mean, seeds, paper value)."""
     fig, ax = plt.subplots(figsize=figsize)
     variants = [v for v in VARIANT_ORDER if v in set(summary["variant"])]
     for i, variant in enumerate(variants):
@@ -278,7 +265,7 @@ def plot_results_bar(summary, figsize=(10, 5)):
 
 
 def plot_curves_compare(histories, metric="accuracy", event="val", seed=42, figsize=(10, 5)):
-    """Overlay one metric over training for each variant (one seed)."""
+    """One metric over training steps, one line per variant."""
     fig, ax = plt.subplots(figsize=figsize)
     for name, history in histories.items():
         variant = variant_of(name)
@@ -299,7 +286,7 @@ def plot_curves_compare(histories, metric="accuracy", event="val", seed=42, figs
 
 
 def plot_gradnorm_compare(histories, seed=42, figsize=(10, 4)):
-    """B1 vs B2: gradient reaching the complexity gate (0 for the hard mask)."""
+    """Norm of dL/dw_c over training steps."""
     fig, ax = plt.subplots(figsize=figsize)
     for name, history in histories.items():
         variant = variant_of(name)
@@ -329,7 +316,7 @@ def spearman(x, y):
 
 
 def plot_routing(experiment_name, project=PROJECT, figsize=(16, 4.5)):
-    """Routing of one MoE run on the test set: #experts, C vs errors, expert usage per label."""
+    """Experts per sample, C for correct/wrong, expert usage per label."""
     frame = routing_frame(experiment_name, project)
     if frame is None:
         raise FileNotFoundError(f"No per-sample routing file for {experiment_name}")
@@ -378,7 +365,7 @@ def predictions(experiment_name, project=PROJECT):
 
 
 def mcnemar(name_a, name_b, project=PROJECT):
-    """Exact McNemar test on the same test set: b = A right & B wrong, c = A wrong & B right."""
+    """Exact McNemar test between two runs on the same test set."""
     from scipy.stats import binomtest
     a, b = predictions(name_a, project), predictions(name_b, project)
     merged = a.merge(b, on="uid", suffixes=("_a", "_b"))

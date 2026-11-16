@@ -1,4 +1,4 @@
-# Published best Top-K configuration for ViANLI (Section 6.2 / Table 12).
+# Top-K setting reported for ViANLI (Sec. 6.2, Table 12)
 experiment:
   name: nlimoe_paper_v3_topk
   description: "ViANLI: N=5, K=4"
@@ -26,7 +26,7 @@ moe:
   threshold_gradient: "hard"
   empty_selection_policy: "zero"
 training:
-  seed: 42 # NOT_REPORTED
+  seed: 42 # not reported
   lr_backbone: 1.0e-5
   lr_moe: 1.0e-5
   weight_decay: 0.0

@@ -7,10 +7,7 @@ from .router import NLIMoERouter
 from .moe_layers import MoEExpertLayer
 
 class NLIMoEModel(nn.Module):
-    """
-    Toàn bộ kiến trúc NLIMoE:
-    Backbone XLM-R -> Representation z -> Router(z) & Experts(z) -> Weighted Aggregation -> Logits.
-    """
+    """Prototype MoE (not the paper architecture)."""
     def __init__(
         self,
         backbone_name: str = "xlm-roberta-base",
@@ -37,12 +34,10 @@ class NLIMoEModel(nn.Module):
         self.pooling = pooling.lower()
         self.sparse_inference = sparse_inference
 
-        # 1. Backbone
         self.config = AutoConfig.from_pretrained(backbone_name)
         self.encoder = AutoModel.from_pretrained(backbone_name, config=self.config)
         self.hidden_size = self.config.hidden_size
 
-        # 2. Router
         self.router = NLIMoERouter(
             input_dim=self.hidden_size,
             num_experts=num_experts,
@@ -55,7 +50,6 @@ class NLIMoEModel(nn.Module):
             threshold_temperature=threshold_temperature
         )
 
-        # 3. Experts Layer
         self.experts = MoEExpertLayer(
             num_experts=num_experts,
             input_dim=self.hidden_size,
@@ -98,8 +92,7 @@ class NLIMoEModel(nn.Module):
         raw_probs = router_out["raw_probs"]
         aux_loss = router_out["aux_loss"]
 
-        # Dense training preserves gradients to the threshold estimator through
-        # every expert. Sparse dispatch is used only at evaluation/inference.
+        # dense in training so every expert gets a gradient
         if self.sparse_inference and not self.training:
             expert_outputs = self.experts.forward_selected(z, selected_mask)
         else:

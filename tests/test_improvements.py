@@ -1,5 +1,4 @@
-"""Tests for the proposed improvements B2 (STE threshold) and B3 (bottleneck experts),
-the training-history log and the experiment queue."""
+"""STE threshold, bottleneck experts, history log, run queue."""
 import json
 import os
 import sys

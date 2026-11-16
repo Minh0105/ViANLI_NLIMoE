@@ -3,10 +3,7 @@ import torch
 import torch.nn as nn
 
 class NLIExpert(nn.Module):
-    """
-    Từng nhánh chuyên gia (Expert) cho bài toán NLI.
-    Cấu trúc: Linear(hidden -> intermediate) -> GELU -> Dropout -> Linear(intermediate -> out_dim).
-    """
+    """Linear -> GELU -> Dropout -> Linear."""
     def __init__(
         self,
         input_dim: int = 768,
@@ -26,9 +23,7 @@ class NLIExpert(nn.Module):
         return self.net(x)
 
 class MoEExpertLayer(nn.Module):
-    """
-    Tập hợp N chuyên gia hoạt động song song.
-    """
+    """N experts applied in parallel."""
     def __init__(
         self,
         num_experts: int = 4,
@@ -54,7 +49,7 @@ class MoEExpertLayer(nn.Module):
         return torch.stack(outputs, dim=1)
 
     def forward_selected(self, x: torch.Tensor, selected_mask: torch.Tensor) -> torch.Tensor:
-        """Dispatch only selected sample/expert pairs (inference path)."""
+        """Run each expert only on the samples routed to it."""
         outputs = []
         output_dim = self.experts[0].net[-1].out_features
         for expert_idx, expert in enumerate(self.experts):
@@ -62,7 +57,6 @@ class MoEExpertLayer(nn.Module):
             expert_output = x.new_zeros((x.size(0), output_dim))
             if indices.numel():
                 selected = expert(x.index_select(0, indices))
-                # Under autocast the expert may return bf16/fp16 while x is fp32.
                 expert_output = expert_output.index_copy(0, indices, selected.to(expert_output.dtype))
             outputs.append(expert_output)
         return torch.stack(outputs, dim=1)

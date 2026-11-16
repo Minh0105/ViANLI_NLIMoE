@@ -13,10 +13,7 @@ LABEL2ID = {
 ID2LABEL = {v: k for k, v in LABEL2ID.items()}
 
 class ViANLIDataset(Dataset):
-    """
-    Dataset wrapper cho bộ dữ liệu uitnlp/ViANLI.
-    Hỗ trợ cả nhãn chuỗi (string) và nhãn số (integer).
-    """
+    """ViANLI split; accepts string or integer labels."""
     def __init__(self, hf_split_dataset, tokenizer, max_length: int = 256, dynamic_padding: bool = False):
         self.data = hf_split_dataset
         self.tokenizer = tokenizer
@@ -32,7 +29,6 @@ class ViANLIDataset(Dataset):
         hypothesis = str(item.get("hypothesis", ""))
         raw_label = item.get("label")
 
-        # Map label chuẩn về [0, 1, 2]
         if isinstance(raw_label, str):
             label_id = LABEL2ID.get(raw_label.lower().strip(), -1)
         elif isinstance(raw_label, int):
@@ -59,7 +55,7 @@ class ViANLIDataset(Dataset):
         }
 
 def make_dynamic_padding_collate(pad_token_id: int):
-    """Pad each batch only to its longest sequence (attention_mask = 0 on padding)."""
+    """Pad each batch to its longest sequence."""
     def collate(items):
         width = max(item["input_ids"].size(0) for item in items)
         ids = torch.full((len(items), width), pad_token_id, dtype=torch.long)
@@ -88,10 +84,7 @@ def load_vianli_dataloaders(
     overfit_subset_size: Optional[int] = None,
     dynamic_padding: bool = False
 ) -> Tuple[DataLoader, DataLoader, DataLoader, Dict[str, Any]]:
-    """
-    Tải dataset uitnlp/ViANLI và chuẩn bị DataLoader cho train, validation, test.
-    Hỗ trợ chế độ overfit_subset_size (32-64 mẫu) cho sanity check.
-    """
+    """Build train/validation/test loaders. `overfit_subset_size` is for sanity checks."""
     print(f"[Data] Loading dataset {dataset_name}...")
     dataset = load_dataset(dataset_name)
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
@@ -104,7 +97,7 @@ def load_vianli_dataloaders(
         print(f"[Data] SANITY CHECK MODE: Creating overfit subset of {overfit_subset_size} samples...")
         indices = list(range(min(overfit_subset_size, len(train_data))))
         train_data = Subset(train_data, indices)
-        # Overfit checks evaluate the exact training examples, not unseen val data.
+        # sanity check: evaluate on the memorised subset
         val_data = train_data
 
     collate_fn = make_dynamic_padding_collate(tokenizer.pad_token_id) if dynamic_padding else None

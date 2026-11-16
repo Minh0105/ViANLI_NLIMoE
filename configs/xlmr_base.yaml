@@ -14,7 +14,7 @@ model:
   num_labels: 3
   pooling: "cls"
   dropout: 0.4
-  encoder_dropout: 0.4 # Applying reported dropout inside encoder is an assumption.
+  encoder_dropout: 0.4 # assumption
 
 training:
   seed: 42
@@ -24,11 +24,11 @@ training:
   batch_size: 16
   epochs: 7
   eval_frequency: 400
-  scheduler: "constant" # NOT_REPORTED
+  scheduler: "constant" # not reported
   warmup_ratio: 0.0
   gradient_accumulation_steps: 1
-  max_grad_norm: null # NOT_REPORTED
-  early_stopping_patience: 0 # NOT_REPORTED
+  max_grad_norm: null # not reported
+  early_stopping_patience: 0 # not reported
 
 provenance:
   source: "https://arxiv.org/html/2406.17716v3"

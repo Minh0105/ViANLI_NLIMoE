@@ -3,7 +3,6 @@ import sys
 import subprocess
 import argparse
 
-# Thiết lập UTF-8 chuẩn trên Windows console
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
