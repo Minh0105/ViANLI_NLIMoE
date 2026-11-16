@@ -29,16 +29,20 @@ Các mục REPORTED trong phiên bản tài liệu cũ chưa có căn cứ đã 
 
 - Exact pretrained checkpoint NLIMoE: dùng `xlm-roberta-large` là suy luận
   từ d=1024, không phải tên checkpoint được trích trực tiếp.
-- AdamW, no clipping/early stopping, seed 42 và chọn best validation accuracy
+- AdamW, no early stopping, seed 42 và chọn best validation accuracy
   là lựa chọn triển khai cho các chi tiết NOT_REPORTED.
 - Evaluation frequency được hiểu là số optimizer step; validation cuối run
   được thêm để đảm bảo luôn có checkpoint.
-- Phạm vi của dropout 0.4 và scheduler không được công bố. Hai cách hiểu:
+- Phạm vi của dropout 0.4 và scheduler, clipping không được công bố. Các cách hiểu:
   - v3 (`configs/v3/`): dropout 0.4 cả trong encoder (hidden/attention) và
     expert, LR cố định, không warmup. Seed 42 trên A100: B1 và B2 đoán một
     nhãn cho mọi câu (val acc 0.334, macro-F1 0.167), B2 test acc 0.337.
-  - v4 (`configs/`, mặc định): dropout 0.4 chỉ ở expert và head, encoder
-    giữ mặc định 0.1; LR tuyến tính với 10% warmup.
+  - v4 (`configs/v4/`): dropout 0.4 chỉ ở expert và head, encoder giữ mặc
+    định 0.1; LR tuyến tính với 10% warmup. B0 học bình thường (val 0.457
+    ở 59% quá trình). B1, B2 đạt val ~0.43 ở bước 400 rồi sụp từ bước 800
+    (val 0.333, macro-F1 0.167, cùng định tuyến cho mọi câu khi đánh giá).
+  - v5 (`configs/`, mặc định): như v4 cộng gradient clipping max_norm 1.0
+    (mặc định của Hugging Face Trainer; bài báo không nêu).
 - Dense head dùng CLS/Dropout/Linear là giả định giữ từ dự án, không tự coi
   là head tác giả.
 - Backprop qua mask cứng không được mô tả. Bản equations dùng hard mask nên

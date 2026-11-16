@@ -1,6 +1,6 @@
 # Top-K setting reported for ViANLI (Sec. 6.2, Table 12)
 experiment:
-  name: nlimoe_paper_v4_topk
+  name: nlimoe_paper_v5_topk
   description: "ViANLI: N=5, K=4"
 data:
   dataset_name: "uitnlp/ViANLI"
@@ -37,7 +37,7 @@ training:
   scheduler: "linear" # not reported
   warmup_ratio: 0.1 # not reported
   gradient_accumulation_steps: 1
-  max_grad_norm: null
+  max_grad_norm: 1.0 # not reported; Hugging Face Trainer default
   early_stopping_patience: 0
 evaluation:
   primary_metric: "accuracy"

@@ -1,6 +1,6 @@
 # B2: nlimoe_dynamic + straight-through threshold
 experiment:
-  name: nlimoe_paper_v4_ste
+  name: nlimoe_paper_v5_ste
   description: "B2 = B1 + straight-through threshold gradient; everything else identical to nlimoe_dynamic.yaml"
 
 data:
@@ -46,7 +46,7 @@ training:
   scheduler: "linear" # not reported
   warmup_ratio: 0.1 # not reported
   gradient_accumulation_steps: 1
-  max_grad_norm: null # not reported
+  max_grad_norm: 1.0 # not reported; Hugging Face Trainer default
   early_stopping_patience: 0 # not reported
 
 provenance:

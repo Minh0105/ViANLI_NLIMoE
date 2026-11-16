@@ -1,0 +1,62 @@
+# v4 settings: encoder dropout 0.1, linear lr with 10% warmup, no gradient clipping (MoE runs collapse after warmup)
+# B2: v4/nlimoe_dynamic + straight-through threshold
+experiment:
+  name: nlimoe_paper_v4_ste
+  description: "B2 = B1 + straight-through threshold gradient; everything else identical to nlimoe_dynamic.yaml"
+
+data:
+  dataset_name: "uitnlp/ViANLI"
+  max_length: 256
+  premise_col: "premise"
+  hypothesis_col: "hypothesis"
+  label_col: "label"
+
+model:
+  architecture: "paper_nlimoe_v3"
+  backbone: "xlm-roberta-large" # d=1024 in the paper
+  expected_hidden_size: 1024
+  num_labels: 3
+  pooling: "mean"
+  dropout: 0.4
+  encoder_dropout: null # XLM-R default 0.1; dropout 0.4 only in experts / head
+
+moe:
+  num_experts: 7
+  expert_hidden_dim: 1024
+  router_type: "linear"
+  routing_type: "dynamic"
+  top_k: 4 # unused for dynamic routing
+  threshold: 0.1
+  gamma: 0.1
+  dynamic_loss_weight: 0.001
+  balance_loss_weight: 0.01
+  threshold_gradient: "straight_through"
+  threshold_temperature: 0.1 # tuned on validation: 0.05 / 0.1 / 0.2
+  expert_type: "linear"
+  empty_selection_policy: "zero" # not reported
+
+training:
+  seed: 42
+  lr_backbone: 1.0e-5
+  lr_moe: 1.0e-5
+  weight_decay: 0.0
+  adam_epsilon: 1.0e-8
+  batch_size: 16
+  epochs: 7
+  eval_frequency: 400
+  scheduler: "linear" # not reported
+  warmup_ratio: 0.1 # not reported
+  gradient_accumulation_steps: 1
+  max_grad_norm: null # not reported
+  early_stopping_patience: 0 # not reported
+
+provenance:
+  source: "https://arxiv.org/html/2406.17716v3"
+  architecture: "Section 5, equations 2-16"
+  training: "Section 6.2"
+  unresolved: ["exact checkpoint identifier", "hard-mask gradient estimator", "empty selection", "optimizer class", "scheduler", "seed", "dense baseline head"]
+
+evaluation:
+  primary_metric: "accuracy"
+  secondary_metric: "macro_f1"
+  save_best_checkpoint: true

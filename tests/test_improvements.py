@@ -101,22 +101,23 @@ class ImprovementTests(unittest.TestCase):
         self.assertEqual(kinds[-1], 'val')
         train = [e for e in events if e['type'] == 'train']
         self.assertTrue(all(e['grad_norm_wc'] > 0 for e in train))
-        self.assertTrue(all({'loss', 'avg_experts', 'mean_complexity', 'mean_threshold'} <= set(e) for e in train))
+        self.assertTrue(all({'loss', 'avg_experts', 'mean_complexity', 'mean_threshold',
+                             'h_std', 'z_norm', 'z_zero_frac'} <= set(e) for e in train))
 
     def test_queue_recognises_finished_runs(self):
         import pandas as pd
         from scripts.run_queue import is_done
         from src.utils.viz import variant_of
         finished = pd.DataFrame({'experiment_name': [
-            'xlmr_large_paper_v4_seed42_20261120_101010_000001',
-            'nlimoe_paper_v4_ste_bottleneck_dynamic_seed42_20261120_101010_000002']})
+            'xlmr_large_paper_v5_seed42_20261120_101010_000001',
+            'nlimoe_paper_v5_ste_bottleneck_dynamic_seed42_20261120_101010_000002']})
         self.assertTrue(is_done('B0', 42, finished))
         self.assertFalse(is_done('B0', 123, finished))
         self.assertTrue(is_done('B3', 42, finished))
         self.assertFalse(is_done('B2', 42, finished))
         self.assertEqual(variant_of(finished['experiment_name'][1]), 'B3')
-        self.assertEqual(variant_of('nlimoe_paper_v4_ste_dynamic_seed7_20261120_101010_000003'), 'B2')
-        self.assertEqual(variant_of('nlimoe_paper_v4_dynamic_dynamic_seed7_20261120_101010_000004'), 'B1')
+        self.assertEqual(variant_of('nlimoe_paper_v5_ste_dynamic_seed7_20261120_101010_000003'), 'B2')
+        self.assertEqual(variant_of('nlimoe_paper_v5_dynamic_dynamic_seed7_20261120_101010_000004'), 'B1')
 
 
 if __name__ == '__main__':

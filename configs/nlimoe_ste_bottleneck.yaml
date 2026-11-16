@@ -1,6 +1,6 @@
 # B3: nlimoe_ste + bottleneck experts
 experiment:
-  name: nlimoe_paper_v4_ste_bottleneck
+  name: nlimoe_paper_v5_ste_bottleneck
   description: "B3 = B2 + bottleneck experts 1024-256-1024; everything else identical to nlimoe_ste.yaml"
 
 data:
@@ -47,7 +47,7 @@ training:
   scheduler: "linear" # not reported
   warmup_ratio: 0.1 # not reported
   gradient_accumulation_steps: 1
-  max_grad_norm: null # not reported
+  max_grad_norm: 1.0 # not reported; Hugging Face Trainer default
   early_stopping_patience: 0 # not reported
 
 provenance:

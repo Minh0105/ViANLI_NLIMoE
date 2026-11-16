@@ -68,7 +68,8 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
     log_every = max(1, int(training.get('log_every', 20)))
     steps_per_epoch = optimizer_steps_per_epoch(loader, accumulation)
     total_steps = steps_per_epoch * epochs
-    window = {'loss': 0.0, 'batches': 0, 'experts': 0.0, 'complexity': 0.0, 'threshold': 0.0, 'routed': 0}
+    window = {'loss': 0.0, 'batches': 0, 'experts': 0.0, 'complexity': 0.0, 'threshold': 0.0, 'routed': 0,
+              'h_std': 0.0, 'z_norm': 0.0, 'z_zero': 0.0, 'diag': 0}
     batch_size = getattr(loader, 'batch_size', None)
     effective = batch_size * accumulation if batch_size else 'n/a'
     print(f"[Train] precision={precision} | grad_accumulation={accumulation} | effective batch={effective}")
@@ -119,6 +120,16 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
             total_loss += loss.item()
             window['loss'] += loss.item()
             window['batches'] += 1
+            with torch.no_grad():
+                h = output.get('pooled_representation')
+                z = output.get('moe_representation')
+                if h is not None and h.size(0) > 1:
+                    # spread of sentence vectors across the batch; ~0 means every sentence looks the same
+                    window['h_std'] += h.float().std(0).mean().item()
+                    window['diag'] += 1
+                    if z is not None:
+                        window['z_norm'] += z.float().norm(dim=-1).mean().item()
+                        window['z_zero'] += (z == 0).float().mean().item()
             if 'selected_mask' in output and output['selected_mask'] is not None:
                 window['experts'] += output['selected_mask'].float().sum(-1).mean().item()
                 window['routed'] += 1
@@ -148,6 +159,11 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
                 record = {'type': 'train', 'step': global_step, 'total_steps': total_steps, 'epoch': epoch,
                           'loss': window['loss'] / max(1, window['batches']),
                           'lr': optimizer.param_groups[0]['lr'], 'gpu_mem_gb': _gpu_memory_gb(device), **probe}
+                if window['diag']:
+                    record.update(h_std=window['h_std'] / window['diag'])
+                    if 'moe_representation' in output:
+                        record.update(z_norm=window['z_norm'] / window['diag'],
+                                      z_zero_frac=window['z_zero'] / window['diag'])
                 if window['routed']:
                     record.update(avg_experts=window['experts'] / window['routed'],
                                   mean_complexity=window['complexity'] / window['routed'],

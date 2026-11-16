@@ -17,12 +17,12 @@ PROJECT = Path(__file__).resolve().parents[1]
 
 # variant -> (description, script, config, name prefix)
 VARIANTS = {
-    "B0": ("XLM-R Large (no MoE)", "scripts/run_xlmr.py", "configs/xlmr_large.yaml", "xlmr_large_paper_v4"),
-    "B1": ("NLIMoE, paper (hard mask)", "scripts/run_moe.py", "configs/nlimoe_dynamic.yaml", "nlimoe_paper_v4_dynamic_dynamic"),
-    "B2": ("NLIMoE + STE", "scripts/run_moe.py", "configs/nlimoe_ste.yaml", "nlimoe_paper_v4_ste_dynamic"),
-    "B3": ("NLIMoE + STE + bottleneck", "scripts/run_moe.py", "configs/nlimoe_ste_bottleneck.yaml", "nlimoe_paper_v4_ste_bottleneck_dynamic"),
-    "A_topk": ("Ablation: paper Top-K (5 experts, K=4)", "scripts/run_moe.py", "configs/nlimoe_topk.yaml", "nlimoe_paper_v4_topk_top_k_top4"),
-    "A_nobal": ("Ablation: B2 without balance loss", "scripts/run_moe.py", "configs/nlimoe_ste_nobalance.yaml", "nlimoe_paper_v4_ste_nobalance_dynamic"),
+    "B0": ("XLM-R Large (no MoE)", "scripts/run_xlmr.py", "configs/xlmr_large.yaml", "xlmr_large_paper_v5"),
+    "B1": ("NLIMoE, paper (hard mask)", "scripts/run_moe.py", "configs/nlimoe_dynamic.yaml", "nlimoe_paper_v5_dynamic_dynamic"),
+    "B2": ("NLIMoE + STE", "scripts/run_moe.py", "configs/nlimoe_ste.yaml", "nlimoe_paper_v5_ste_dynamic"),
+    "B3": ("NLIMoE + STE + bottleneck", "scripts/run_moe.py", "configs/nlimoe_ste_bottleneck.yaml", "nlimoe_paper_v5_ste_bottleneck_dynamic"),
+    "A_topk": ("Ablation: paper Top-K (5 experts, K=4)", "scripts/run_moe.py", "configs/nlimoe_topk.yaml", "nlimoe_paper_v5_topk_top_k_top4"),
+    "A_nobal": ("Ablation: B2 without balance loss", "scripts/run_moe.py", "configs/nlimoe_ste_nobalance.yaml", "nlimoe_paper_v5_ste_nobalance_dynamic"),
 }
 
 
@@ -50,8 +50,10 @@ def settings(variant):
     training = cfg["training"]
     lr = (f"linear lr, {training.get('warmup_ratio', 0):.0%} warmup" if training.get("scheduler") == "linear"
           else "constant lr")
+    clip = training.get("max_grad_norm")
     return " · ".join([f"v{version.group(1)}" if version else "?",
-                       f"encoder dropout {encoder if encoder is not None else '0.1'}", lr])
+                       f"encoder dropout {encoder if encoder is not None else '0.1'}", lr,
+                       f"clip {clip}" if clip else "no clip"])
 
 
 def finished_runs(summary_csv=PROJECT / "results" / "summary.csv"):

@@ -55,6 +55,8 @@ def evaluate_moe(model, dataloader, device, routing_mode=None, threshold=None):
     all_masks = []
     all_complexity = []
     all_threshold = []
+    all_pooled = []
+    all_moe = []
     total_loss = 0.0
 
     with torch.no_grad():
@@ -88,6 +90,9 @@ def evaluate_moe(model, dataloader, device, routing_mode=None, threshold=None):
             all_uids.extend(uids)
             all_weights.append(outputs["routing_weights"].float().cpu())
             all_masks.append(outputs["selected_mask"].float().cpu())
+            if outputs.get("moe_representation") is not None:
+                all_pooled.append(outputs["pooled_representation"].float().cpu())
+                all_moe.append(outputs["moe_representation"].float().cpu())
             if outputs.get("complexity") is not None:
                 all_complexity.append(outputs["complexity"].float().reshape(-1).cpu())
                 all_threshold.append(outputs["threshold"].float().reshape(-1).cpu())
@@ -107,6 +112,11 @@ def evaluate_moe(model, dataloader, device, routing_mode=None, threshold=None):
     )
 
     metrics["avg_experts"] = routing_stats["avg_experts_per_sample"]
+    if all_moe:
+        pooled, moe = torch.cat(all_pooled), torch.cat(all_moe)
+        metrics["h_std"] = float(pooled.std(0).mean())
+        metrics["z_norm"] = float(moe.norm(dim=-1).mean())
+        metrics["z_zero_frac"] = float((moe == 0).float().mean())
     metrics["routing_entropy"] = routing_stats["mean_routing_entropy"]
     per_sample = {"weights": cat_weights, "mask": cat_masks,
                   "complexity": torch.cat(all_complexity) if all_complexity else None,

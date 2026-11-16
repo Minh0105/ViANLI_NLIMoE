@@ -107,6 +107,8 @@ def progress_text(name, history):
         parts.append(f"còn khoảng {_fmt_duration(eta)}")
     if not val.empty:
         parts.append(f"val acc tốt nhất {val['accuracy'].max():.4f}")
+    if "gpu_mem_gb" in train and not train.empty:
+        parts.append(f"GPU {train['gpu_mem_gb'].max():.1f} GB")
     return " · ".join(parts)
 
 
@@ -173,10 +175,29 @@ def plot_live(name, history, figsize=(16, 8)):
         ax.set_title("‖∂L/∂w_c‖")
 
     ax = axes[1, 2]
-    if "gpu_mem_gb" in train and not train.empty:
-        ax.plot(train["step"], train["gpu_mem_gb"], color="#5A6474")
-        ax.set_ylim(0, max(1.0, train["gpu_mem_gb"].max() * 1.2))
-    ax.set_title("Bộ nhớ GPU đỉnh (GB)")
+    if "h_std" in train or "h_std" in val:
+        if "h_std" in train:
+            ax.plot(train["step"], train["h_std"], color="#2350A8", label="độ đa dạng h (train)")
+        if "h_std" in val:
+            ax.plot(val["step"], val["h_std"], "o", color="#14213D", label="độ đa dạng h (val)")
+        ax.set_ylim(bottom=0)
+        ax.set_ylabel("std của h giữa các câu")
+        if "z_zero_frac" in train or "z_zero_frac" in val:
+            ax2 = ax.twinx()
+            if "z_zero_frac" in train:
+                ax2.plot(train["step"], train["z_zero_frac"] * 100, color="#C2551B", ls="--", label="% z = 0 (train)")
+            if "z_zero_frac" in val:
+                ax2.plot(val["step"], val["z_zero_frac"] * 100, "s", color="#A3430F", label="% z = 0 (val)")
+            ax2.set_ylim(0, 100)
+            ax2.set_ylabel("% đầu ra MoE bằng 0", color="#C2551B")
+            lines = ax.get_legend_handles_labels()[0] + ax2.get_legend_handles_labels()[0]
+            ax.legend(lines, [l.get_label() for l in lines], fontsize=7, loc="upper right")
+        else:
+            ax.legend(fontsize=7)
+        ax.set_title("Chẩn đoán sụp · h về 0 hoặc z = 0 gần 100% là sụp")
+    else:
+        ax.text(0.5, 0.5, "chưa có số liệu chẩn đoán", ha="center", va="center", transform=ax.transAxes, color="grey")
+        ax.set_title("Chẩn đoán sụp")
 
     for ax in axes.flat:
         ax.grid(alpha=0.3)
