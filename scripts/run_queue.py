@@ -1,6 +1,9 @@
-"""Run experiments in sequence, skipping (variant, seed) pairs already in results/summary.csv.
+"""Run experiments, skipping (variant, seed) pairs already in results/summary.csv.
 
-    python scripts/run_queue.py --variants B0 B1 B2 B3 --seeds 42 123 2026
+    python scripts/run_queue.py --variants B0 B1 B2 B3 --seeds 42 123 2026 --parallel 3
+
+--parallel N runs N jobs at once on the same GPU. At batch 16 one job uses ~11 GB and leaves
+most of an A100 idle, so 2-3 jobs finish the queue sooner without changing any training setting.
 """
 import argparse
 import json
@@ -68,9 +71,23 @@ def is_done(variant, seed, finished):
     return any(pattern.match(str(name)) for name in finished["experiment_name"])
 
 
-def write_status(path, queue, current=None):
-    path.write_text(json.dumps({"updated": time.time(), "current": current, "queue": queue},
-                               ensure_ascii=False, indent=2), encoding="utf-8")
+def write_status(path, queue):
+    running = [item for item in queue if item["state"] == "running"]
+    status = {"updated": time.time(), "current": running[0] if running else None, "running": running, "queue": queue}
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def command_for(variant, seed, args):
+    _, script, config, _ = VARIANTS[variant]
+    command = [sys.executable, "-u", script, "--config", config, "--seed", str(seed), "--precision", args.precision]
+    if script.endswith("run_moe.py"):
+        command += ["--routing_type", "top_k" if variant == "A_topk" else "dynamic"]
+    for flag, value in (("--batch_size", args.batch_size), ("--grad_accum", args.grad_accum), ("--epochs", args.epochs)):
+        if value is not None:
+            command += [flag, str(value)]
+    return command
 
 
 def main():
@@ -83,6 +100,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--grad_accum", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None, help="Override epochs (for quick trials only)")
+    parser.add_argument("--parallel", type=int, default=1, help="Jobs running at the same time on the GPU")
     parser.add_argument("--dry_run", action="store_true", help="Only print the plan")
     args = parser.parse_args()
 
@@ -103,28 +121,34 @@ def main():
         return
     write_status(status_path, queue)
 
-    for item in queue:
-        if item["state"] == "done":
-            continue
-        variant, seed = item["variant"], item["seed"]
-        _, script, config, _ = VARIANTS[variant]
-        command = [sys.executable, "-u", script, "--config", config, "--seed", str(seed), "--precision", args.precision]
-        if script.endswith("run_moe.py"):
-            command += ["--routing_type", "top_k" if variant == "A_topk" else "dynamic"]
-        for flag, value in (("--batch_size", args.batch_size), ("--grad_accum", args.grad_accum), ("--epochs", args.epochs)):
-            if value is not None:
-                command += [flag, str(value)]
-        out_path = logs / f"{variant}_seed{seed}.out"
-        item.update(state="running", started=time.time(), stdout=str(out_path.relative_to(PROJECT)))
-        write_status(status_path, queue, current=item)
-        print(f"\n>>> {variant} seed {seed}: {' '.join(command)}", flush=True)
-        with open(out_path, "w", encoding="utf-8") as out:
-            code = subprocess.call(command, cwd=PROJECT, stdout=out, stderr=subprocess.STDOUT)
-        item.update(state="done" if code == 0 else "failed", finished=time.time(), exit_code=code)
-        write_status(status_path, queue)
-        print(f"<<< {variant} seed {seed}: {item['state']} (exit {code})", flush=True)
-        if code != 0:
-            print(f"    log: {out_path}")
+    pending = [item for item in queue if item["state"] == "pending"]
+    active = []  # (item, process, output file)
+    while pending or active:
+        while pending and len(active) < max(1, args.parallel):
+            item = pending.pop(0)
+            variant, seed = item["variant"], item["seed"]
+            command = command_for(variant, seed, args)
+            out_path = logs / f"{variant}_seed{seed}.out"
+            item.update(state="running", started=time.time(), stdout=str(out_path.relative_to(PROJECT)))
+            out = open(out_path, "w", encoding="utf-8")
+            active.append((item, subprocess.Popen(command, cwd=PROJECT, stdout=out, stderr=subprocess.STDOUT), out))
+            write_status(status_path, queue)
+            print(f">>> {variant} seed {seed}: {' '.join(command)}", flush=True)
+            if pending and len(active) < args.parallel:
+                time.sleep(30)  # stagger model loading
+        time.sleep(5)
+        for entry in list(active):
+            item, process, out = entry
+            code = process.poll()
+            if code is None:
+                continue
+            out.close()
+            active.remove(entry)
+            item.update(state="done" if code == 0 else "failed", finished=time.time(), exit_code=code)
+            write_status(status_path, queue)
+            print(f"<<< {item['variant']} seed {item['seed']}: {item['state']} (exit {code})", flush=True)
+            if code != 0:
+                print(f"    log: {item['stdout']}")
     write_status(status_path, queue)
     print("\nQueue finished.")
 

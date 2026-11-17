@@ -3,6 +3,11 @@ import csv
 from typing import Dict, Any, List
 import pandas as pd
 
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+
 SUMMARY_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "results", "summary.csv")
 
 def append_to_summary(record: Dict[str, Any], csv_path: str = None) -> None:
@@ -21,6 +26,8 @@ def append_to_summary(record: Dict[str, Any], csv_path: str = None) -> None:
     file_exists = os.path.isfile(csv_path)
     
     with open(csv_path, mode="a", newline="", encoding="utf-8") as f:
+        if fcntl is not None:  # parallel runs append to the same file
+            fcntl.flock(f, fcntl.LOCK_EX)
         writer = csv.DictWriter(f, fieldnames=columns)
         if not file_exists:
             writer.writeheader()

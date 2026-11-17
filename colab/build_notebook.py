@@ -74,16 +74,17 @@ except Exception:
 md("## Runs")
 code(r"""
 import torch
-VARIANTS = ['B0', 'B1', 'B2', 'B3']   # + 'A_topk', 'A_nobal'
-SEEDS = [42]                           # [42, 123, 2026]
+VARIANTS = ['B0', 'B1', 'B2', 'B3', 'A_topk', 'A_nobal']
+SEEDS = [42, 123, 2026]
 PRECISION = 'auto'
 
 memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
 BATCH, ACCUM = (16, 1) if memory_gb >= 39 else (8, 2)
-print(f'{torch.cuda.get_device_name(0)}, {memory_gb:.0f} GB -> batch {BATCH} x {ACCUM}')
+PARALLEL = max(1, min(3, int(memory_gb // 13)))   # ~11 GB per job at batch 16
+print(f'{torch.cuda.get_device_name(0)}, {memory_gb:.0f} GB -> batch {BATCH} x {ACCUM}, {PARALLEL} jobs at once')
 
 QUEUE_ARGS = ['--variants', *VARIANTS, '--seeds', *map(str, SEEDS), '--precision', PRECISION,
-              '--batch_size', str(BATCH), '--grad_accum', str(ACCUM)]
+              '--batch_size', str(BATCH), '--grad_accum', str(ACCUM), '--parallel', str(PARALLEL)]
 !python scripts/run_queue.py {' '.join(QUEUE_ARGS)} --dry_run
 """)
 code(r"""

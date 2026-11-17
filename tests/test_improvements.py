@@ -119,6 +119,46 @@ class ImprovementTests(unittest.TestCase):
         self.assertEqual(variant_of('nlimoe_paper_v5_ste_dynamic_seed7_20261120_101010_000003'), 'B2')
         self.assertEqual(variant_of('nlimoe_paper_v5_dynamic_dynamic_seed7_20261120_101010_000004'), 'B1')
 
+    def test_queue_runs_jobs_in_parallel(self):
+        import scripts.run_queue as rq
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            job = root / 'job.py'
+            job.write_text('import json, os, sys, time\n'
+                           'log = os.path.join(os.path.dirname(sys.argv[0]), "events.txt")\n'
+                           'open(log, "a").write(f"start {time.time()}\\n")\n'
+                           'time.sleep(1.5)\n'
+                           'open(log, "a").write(f"end {time.time()}\\n")\n'
+                           'sys.exit(1 if "123" in sys.argv else 0)\n', encoding='utf-8')
+            dummy = {v: (v, str(job), 'unused.yaml', v) for v in ('B0', 'B1')}
+            argv = ['run_queue.py', '--variants', 'B0', 'B1', '--seeds', '42', '123', '--parallel', '2']
+            with patch.object(rq, 'PROJECT', root), patch.dict(rq.VARIANTS, dummy, clear=True), \
+                    patch.object(rq, 'settings', lambda v: 'test'), \
+                    patch.object(rq, 'finished_runs', lambda: None), \
+                    patch.object(rq, 'is_done', lambda variant, seed, finished: False), \
+                    patch.object(rq.time, 'sleep', lambda s: real_sleep(min(s, 0.2))), \
+                    patch.object(sys, 'argv', argv):
+                rq.main()
+            status = json.loads((root / 'logs' / 'queue_status.json').read_text(encoding='utf-8'))
+            events = (root / 'events.txt').read_text().split()
+        states = {(i['variant'], i['seed']): i['state'] for i in status['queue']}
+        self.assertEqual(states, {('B0', 42): 'done', ('B1', 42): 'done', ('B0', 123): 'failed', ('B1', 123): 'failed'})
+        self.assertEqual(status['running'], [])
+        # at most 2 jobs overlap, and at some point 2 do
+        marks = sorted((float(t), 1 if k == 'start' else -1) for k, t in zip(events[::2], events[1::2]))
+        load, peak = 0, 0
+        for _, delta in marks:
+            load += delta
+            peak = max(peak, load)
+        self.assertEqual(peak, 2)
+
+
+_SLEEP = __import__('time').sleep
+
+
+def real_sleep(seconds):
+    _SLEEP(seconds)
+
 
 if __name__ == '__main__':
     unittest.main()

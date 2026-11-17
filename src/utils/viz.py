@@ -228,19 +228,29 @@ def queue_alive(project=PROJECT):
         return False
 
 
-def current_run(project=PROJECT):
-    """(status of the running item, its history) or (None, None)."""
+def running_jobs(project=PROJECT):
+    """[(status item, (name, history) or None)] for every running job."""
     path = Path(project) / "logs" / "queue_status.json"
     if not path.exists():
-        return None, None
-    item = json.loads(path.read_text(encoding="utf-8")).get("current")
-    if not item or item.get("state") != "running":
-        return None, None
-    files = [p for p in (Path(project) / "logs").glob("*.jsonl") if p.stat().st_mtime >= item.get("started", 0)]
-    if not files:
-        return item, None
-    newest = max(files, key=lambda p: p.stat().st_mtime)
-    return item, (newest.stem, load_history(newest))
+        return []
+    status = json.loads(path.read_text(encoding="utf-8"))
+    items = status.get("running") or ([status["current"]] if status.get("current") else [])
+    jobs = []
+    for item in items:
+        if item.get("state") != "running":
+            continue
+        files = [p for p in (Path(project) / "logs").glob("*.jsonl")
+                 if p.stat().st_mtime >= item.get("started", 0)
+                 and variant_of(p.stem) == item["variant"] and seed_of(p.stem) == item["seed"]]
+        newest = max(files, key=lambda p: p.stat().st_mtime) if files else None
+        jobs.append((item, (newest.stem, load_history(newest)) if newest else None))
+    return jobs
+
+
+def current_run(project=PROJECT):
+    """(status of the first running item, its history) or (None, None)."""
+    jobs = running_jobs(project)
+    return jobs[0] if jobs else (None, None)
 
 
 def monitor(refresh_seconds=60, project=PROJECT, stop_when_idle=True):
@@ -258,18 +268,18 @@ def monitor(refresh_seconds=60, project=PROJECT, stop_when_idle=True):
                 if all(entry["state"] in ("done", "failed") for entry in status["queue"]):
                     print("Hàng đợi đã chạy xong.")
                     return
-            alive = queue_alive(project)
-            item, run = current_run(project)
-            if not alive:
+            if not queue_alive(project):
                 print("Hàng đợi không chạy. Chạy ô khởi động hàng đợi; nếu lỗi, xem logs/queue.out.")
                 return
-            if item is None:
+            jobs = running_jobs(project)
+            if not jobs:
                 print("Hàng đợi đang khởi động...")
-            elif run is None:
-                print(f"{item['variant']} seed {item['seed']}: đang tải mô hình và dữ liệu...")
-            else:
-                plot_live(*run)
-                plt.show()
+            for item, run in jobs:
+                if run is None:
+                    print(f"{item['variant']} seed {item['seed']}: đang tải mô hình và dữ liệu...")
+                else:
+                    plot_live(*run)
+                    plt.show()
             time.sleep(refresh_seconds)
     except KeyboardInterrupt:
         print("Đã dừng theo dõi (huấn luyện vẫn tiếp tục chạy nền).")
