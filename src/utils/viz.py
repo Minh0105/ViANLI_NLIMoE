@@ -232,11 +232,14 @@ def queue_table(project=PROJECT):
 
 
 def queue_alive(project=PROJECT):
+    """True if logs/queue.pid names a live run_queue.py process (a new Colab VM may reuse the number)."""
     try:
-        os.kill(int((Path(project) / "logs" / "queue.pid").read_text()), 0)
-        return True
+        pid = int((Path(project) / "logs" / "queue.pid").read_text())
+        os.kill(pid, 0)
     except (OSError, ValueError):
         return False
+    cmdline = Path(f"/proc/{pid}/cmdline")
+    return "run_queue" in cmdline.read_bytes().decode(errors="ignore") if cmdline.exists() else True
 
 
 def running_jobs(project=PROJECT):

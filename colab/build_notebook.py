@@ -100,10 +100,12 @@ PID_FILE = 'logs/queue.pid'
 os.makedirs('logs', exist_ok=True)
 
 def queue_pid():
+    # the pid must still be run_queue.py: after a runtime change the old number can belong to another process
     try:
         pid = int(open(PID_FILE).read())
         os.kill(pid, 0)
-        return pid
+        with open(f'/proc/{pid}/cmdline', 'rb') as handle:
+            return pid if b'run_queue' in handle.read() else None
     except Exception:
         return None
 
