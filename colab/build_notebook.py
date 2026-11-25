@@ -74,7 +74,8 @@ except Exception:
 md("## Runs")
 code(r"""
 import torch
-VARIANTS = ['B0', 'B1', 'B2', 'B3', 'A_topk', 'A_nobal']
+VARIANTS = ['B0', 'B1', 'B2', 'B3', 'A_topk', 'A_nobal',
+            'B2_T005', 'B2_T02', 'B4_c002', 'B4_c01', 'B3_r384']   # finished runs are skipped
 SEEDS = [42, 123, 2026]
 PRECISION = 'auto'
 

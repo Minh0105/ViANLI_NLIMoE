@@ -83,6 +83,45 @@ class ImprovementTests(unittest.TestCase):
         self.assertEqual(b2['moe']['expert_type'], 'linear')
         self.assertEqual(changed_b3, {'expert_type', 'bottleneck_dim'})
 
+    def test_new_configs_change_only_one_setting(self):
+        load = lambda name: yaml.safe_load(Path(f'configs/{name}.yaml').read_text(encoding='utf-8'))
+        changed = lambda a, b: {k for k in set(a['moe']) | set(b['moe']) if a['moe'].get(k) != b['moe'].get(k)}
+        b2, b3 = load('nlimoe_ste'), load('nlimoe_ste_bottleneck')
+        for name, base, key in (('nlimoe_ste_t005', b2, 'threshold_temperature'),
+                                ('nlimoe_ste_t02', b2, 'threshold_temperature'),
+                                ('nlimoe_ste_cost002', b2, 'expert_cost_weight'),
+                                ('nlimoe_ste_cost01', b2, 'expert_cost_weight'),
+                                ('nlimoe_ste_bottleneck384', b3, 'bottleneck_dim')):
+            cfg = load(name)
+            for section in ('data', 'model', 'training'):
+                self.assertEqual(cfg[section], base[section], name)
+            self.assertEqual(changed(base, cfg), {key}, name)
+            self.assertNotEqual(cfg['experiment']['name'], base['experiment']['name'])
+
+    def test_expert_cost_reaches_threshold_only_with_ste(self):
+        def gate_gradient_from_cost(config_name):
+            torch.manual_seed(0)
+            model = tiny_model(config_name, expert_cost_weight=1.0, dynamic_loss_weight=0.0, balance_loss_weight=0.0)
+            ids, mask, _ = batch()
+            model.train()
+            out = model(ids, mask)
+            self.assertAlmostEqual(float(out['expected_experts']), float(out['selected_mask'].float().sum(-1).mean()), places=5)
+            if not out['expected_experts'].requires_grad:  # hard mask: the count is a constant
+                return 0.0
+            out['expected_experts'].backward()
+            return sum(float(p.grad.abs().sum()) for p in model.router.complexity_gate.parameters() if p.grad is not None)
+        self.assertEqual(gate_gradient_from_cost('nlimoe_dynamic'), 0.0)
+        self.assertGreater(gate_gradient_from_cost('nlimoe_ste'), 0.0)
+        # raising the threshold lowers the expert count, so the penalty pushes rho up
+        torch.manual_seed(0)
+        model = tiny_model('nlimoe_ste')
+        model.train()
+        ids, mask, _ = batch()
+        out = model(ids, mask)
+        out['threshold'].retain_grad()
+        out['expected_experts'].backward()
+        self.assertLess(float(out['threshold'].grad.sum()), 0.0)
+
     def test_history_log_records_training_and_validation(self):
         torch.manual_seed(0)
         model = tiny_model('nlimoe_ste')

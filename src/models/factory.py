@@ -16,7 +16,8 @@ def build_moe_model(cfg, routing_type=None, top_k=None, threshold=None):
             encoder_dropout=model.get('encoder_dropout'), expected_hidden_size=model.get('expected_hidden_size', 1024),
             threshold_gradient=moe.get('threshold_gradient', 'hard'),
             threshold_temperature=moe.get('threshold_temperature', 0.1),
-            expert_type=moe.get('expert_type', 'linear'), bottleneck_dim=moe.get('bottleneck_dim', 256))
+            expert_type=moe.get('expert_type', 'linear'), bottleneck_dim=moe.get('bottleneck_dim', 256),
+            expert_cost_weight=moe.get('expert_cost_weight', 0.0))
     return NLIMoEModel(
         backbone_name=model['backbone'], num_labels=model.get('num_labels', 3),
         num_experts=moe.get('num_experts', 4), intermediate_dim=moe.get('intermediate_dim', 1536),

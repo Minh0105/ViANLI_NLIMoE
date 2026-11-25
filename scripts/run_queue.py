@@ -26,6 +26,11 @@ VARIANTS = {
     "B3": ("NLIMoE + STE + bottleneck", "scripts/run_moe.py", "configs/nlimoe_ste_bottleneck.yaml", "nlimoe_paper_v5_ste_bottleneck_dynamic"),
     "A_topk": ("Ablation: paper Top-K (5 experts, K=4)", "scripts/run_moe.py", "configs/nlimoe_topk.yaml", "nlimoe_paper_v5_topk_top_k_top4"),
     "A_nobal": ("Ablation: B2 without balance loss", "scripts/run_moe.py", "configs/nlimoe_ste_nobalance.yaml", "nlimoe_paper_v5_ste_nobalance_dynamic"),
+    "B2_T005": ("B2 with STE temperature 0.05", "scripts/run_moe.py", "configs/nlimoe_ste_t005.yaml", "nlimoe_paper_v5_ste_t005_dynamic"),
+    "B2_T02": ("B2 with STE temperature 0.2", "scripts/run_moe.py", "configs/nlimoe_ste_t02.yaml", "nlimoe_paper_v5_ste_t02_dynamic"),
+    "B4_c002": ("B2 + expert cost 0.02", "scripts/run_moe.py", "configs/nlimoe_ste_cost002.yaml", "nlimoe_paper_v5_ste_cost002_dynamic"),
+    "B4_c01": ("B2 + expert cost 0.1", "scripts/run_moe.py", "configs/nlimoe_ste_cost01.yaml", "nlimoe_paper_v5_ste_cost01_dynamic"),
+    "B3_r384": ("B3 with bottleneck r = 384", "scripts/run_moe.py", "configs/nlimoe_ste_bottleneck384.yaml", "nlimoe_paper_v5_ste_bottleneck384_dynamic"),
 }
 
 

@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 PROJECT = Path(__file__).resolve().parents[2]
 LABELS = ["entailment", "neutral", "contradiction"]
-VARIANT_ORDER = ["B0", "B1", "B2", "B3", "A_topk", "A_nobal"]
+VARIANT_ORDER = ["B0", "B1", "B2", "B3", "A_topk", "A_nobal", "B2_T005", "B2_T02", "B4_c002", "B4_c01", "B3_r384"]
 VARIANT_NAMES = {
     "B0": "B0 · XLM-R Large",
     "B1": "B1 · NLIMoE (bài báo)",
@@ -20,9 +20,15 @@ VARIANT_NAMES = {
     "B3": "B3 · + bottleneck",
     "A_topk": "Ablation · Top-K",
     "A_nobal": "Ablation · bỏ L_bal",
+    "B2_T005": "B2 · T = 0,05",
+    "B2_T02": "B2 · T = 0,2",
+    "B4_c002": "B4 · phạt chi phí 0,02",
+    "B4_c01": "B4 · phạt chi phí 0,1",
+    "B3_r384": "B3 · bottleneck r = 384",
 }
 COLORS = {"B0": "#5A6474", "B1": "#2350A8", "B2": "#C2551B", "B3": "#2E8B57",
-          "A_topk": "#8E6CC4", "A_nobal": "#B8860B"}
+          "A_topk": "#8E6CC4", "A_nobal": "#B8860B", "B2_T005": "#E08A5A", "B2_T02": "#8C3A10",
+          "B4_c002": "#4FA3A5", "B4_c01": "#1F6E70", "B3_r384": "#7BBF8E"}
 PAPER = {"B0": 0.455, "B1": 0.473}
 
 

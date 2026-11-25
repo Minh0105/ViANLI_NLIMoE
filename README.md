@@ -14,6 +14,9 @@ assumptions are listed in [analysis/paper_extraction.md](analysis/paper_extracti
 | `nlimoe_ste_bottleneck.yaml` | B3 · B2 + bottleneck experts 1024→256→1024 |
 | `nlimoe_topk.yaml` | ablation · paper Top-K (5 experts, K=4) |
 | `nlimoe_ste_nobalance.yaml` | ablation · B2 without balance loss |
+| `nlimoe_ste_t005.yaml`, `nlimoe_ste_t02.yaml` | B2 with STE temperature 0.05 / 0.2 |
+| `nlimoe_ste_cost002.yaml`, `nlimoe_ste_cost01.yaml` | B4 · B2 + λ · experts per sample in the loss (λ = 0.02 / 0.1) |
+| `nlimoe_ste_bottleneck384.yaml` | B3 with r = 384 |
 | `xlmr_base.yaml`, `lightweight_moe_experimental.yaml` | early experiments |
 
 Training follows Sec. 6.2: 7 epochs, batch 16, lr 1e-5, max length 256, dropout 0.4 (experts/head),
@@ -25,6 +28,9 @@ With the paper's hard mask `1(P > rho)` the complexity gate gets no gradient, so
 is never trained. B2 keeps the hard mask in the forward pass and uses the gradient of
 `sigmoid((P - rho) / T)` in the backward pass. B3 replaces each expert by
 `Linear(1024,256) → ReLU → Linear(256,1024) → Dropout → ReLU` (525,568 parameters, −49.9%).
+
+The expert-cost penalty only reaches the threshold through the STE: with the hard mask the number of
+selected experts is a constant for autograd. Results so far: [analysis/v5_results.md](analysis/v5_results.md).
 
 ## Usage
 

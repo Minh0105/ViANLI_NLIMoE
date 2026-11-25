@@ -1,6 +1,7 @@
 """NLIMoE (arXiv:2406.17716v3, Sec. 5, Eq. 2-16).
 
-threshold_gradient='straight_through' and expert_type='bottleneck' are our
+threshold_gradient='straight_through', expert_type='bottleneck' and
+expert_cost_weight (a penalty on experts used per sample) are our
 modifications; the defaults follow the paper. An empty selection gives a zero
 MoE vector (not specified in the paper).
 """
@@ -57,7 +58,9 @@ class PaperRouter(nn.Module):
         # Eq. (12): average over experts, then over the batch.
         dynamic_loss = -(probabilities * probabilities.clamp_min(1e-9).log()).sum(-1).mean() / self.num_experts
         balance_loss = self.num_experts * (mask.float().mean(0) * probabilities.mean(0)).sum()
-        return {"routing_weights": weights, "selected_mask": mask,
+        # experts used per sample; with STE its gradient reaches the threshold
+        expected_experts = selection.sum(-1).mean()
+        return {"routing_weights": weights, "selected_mask": mask, "expected_experts": expected_experts,
                 "raw_probs": probabilities, "complexity": complexity,
                 "threshold": threshold, "dynamic_loss": dynamic_loss,
                 "aux_loss": balance_loss, "empty_selection": ~mask.any(-1)}
@@ -105,7 +108,7 @@ class PaperNLIMoEModel(nn.Module):
                  dynamic_loss_weight=0.001, balance_loss_weight=0.01,
                  encoder_dropout=None, expected_hidden_size=1024,
                  threshold_gradient="hard", threshold_temperature=0.1,
-                 expert_type="linear", bottleneck_dim=256):
+                 expert_type="linear", bottleneck_dim=256, expert_cost_weight=0.0):
         super().__init__()
         self.config = AutoConfig.from_pretrained(backbone_name)
         if expected_hidden_size is not None and self.config.hidden_size != expected_hidden_size:
@@ -123,6 +126,7 @@ class PaperNLIMoEModel(nn.Module):
         self.classifier = nn.Linear(self.hidden_size, num_labels)
         self.dynamic_loss_weight = dynamic_loss_weight
         self.balance_loss_weight = balance_loss_weight
+        self.expert_cost_weight = expert_cost_weight
 
     def forward(self, input_ids, attention_mask, labels=None,
                 routing_mode_override=None, threshold_override=None):
@@ -138,6 +142,7 @@ class PaperNLIMoEModel(nn.Module):
         logits = self.classifier(self.layer_norm(combined))
         task_loss = None if labels is None else nn.functional.cross_entropy(logits, labels)
         loss = None if labels is None else (task_loss + self.dynamic_loss_weight * routed["dynamic_loss"]
-                                           + self.balance_loss_weight * routed["aux_loss"])
+                                           + self.balance_loss_weight * routed["aux_loss"]
+                                           + self.expert_cost_weight * routed["expected_experts"])
         return {**routed, "logits": logits, "loss": loss, "task_loss": task_loss,
                 "pooled_representation": pooled, "moe_representation": combined}
