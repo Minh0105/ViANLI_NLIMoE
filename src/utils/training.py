@@ -52,10 +52,31 @@ def _gpu_memory_gb(device):
     return round(torch.cuda.max_memory_allocated(device) / 1024 ** 3, 2)
 
 
+def load_teacher(path):
+    """Teacher logits saved by scripts/dump_teacher_logits.py, as {uid: tensor(3)}."""
+    data = torch.load(path, map_location='cpu', weights_only=False)
+    return dict(zip(data['uids'], data['logits'].float()))
+
+
+def distillation_loss(student_logits, teacher_logits, temperature):
+    """Hinton et al. (2015): T^2 * KL(teacher_T || student_T)."""
+    t = temperature
+    return torch.nn.functional.kl_div(
+        torch.log_softmax(student_logits.float() / t, dim=-1),
+        torch.softmax(teacher_logits.float() / t, dim=-1),
+        reduction='batchmean') * t * t
+
+
 def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
                           training, evaluate, checkpoint_path, sanity=False,
-                          history_path=None, grad_probe=None):
-    """Train for `epochs`, validate every `eval_frequency` optimizer steps, keep the best checkpoint."""
+                          history_path=None, grad_probe=None, teacher=None):
+    """Train for `epochs`, validate every `eval_frequency` optimizer steps, keep the best checkpoint.
+
+    teacher: {uid: logits}; with it the loss is (1 - alpha) * loss + alpha * distillation loss,
+    alpha and temperature taken from training['distill'].
+    """
+    distill = training.get('distill') or {}
+    alpha, kd_temperature = float(distill.get('alpha', 0.5)), float(distill.get('temperature', 2.0))
     best = None
     stale = 0
     global_step = 0
@@ -69,7 +90,7 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
     steps_per_epoch = optimizer_steps_per_epoch(loader, accumulation)
     total_steps = steps_per_epoch * epochs
     window = {'loss': 0.0, 'batches': 0, 'experts': 0.0, 'complexity': 0.0, 'threshold': 0.0, 'routed': 0,
-              'h_std': 0.0, 'z_norm': 0.0, 'z_zero': 0.0, 'diag': 0}
+              'h_std': 0.0, 'z_norm': 0.0, 'z_zero': 0.0, 'diag': 0, 'kd': 0.0}
     batch_size = getattr(loader, 'batch_size', None)
     effective = batch_size * accumulation if batch_size else 'n/a'
     print(f"[Train] precision={precision} | grad_accumulation={accumulation} | effective batch={effective}")
@@ -112,6 +133,11 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
                                attention_mask=batch['attention_mask'].to(device),
                                labels=batch['label'].to(device))
             loss = output['loss']
+            if teacher is not None:
+                targets = torch.stack([teacher[uid] for uid in batch['uid']]).to(device)
+                kd = distillation_loss(output['logits'], targets, kd_temperature)
+                loss = (1 - alpha) * loss + alpha * kd
+                window['kd'] += kd.item()
             scaled = loss / group_size
             if scaler is not None:
                 scaler.scale(scaled).backward()
@@ -159,6 +185,8 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
                 record = {'type': 'train', 'step': global_step, 'total_steps': total_steps, 'epoch': epoch,
                           'loss': window['loss'] / max(1, window['batches']),
                           'lr': optimizer.param_groups[0]['lr'], 'gpu_mem_gb': _gpu_memory_gb(device), **probe}
+                if teacher is not None:
+                    record.update(kd_loss=window['kd'] / max(1, window['batches']))
                 if window['diag']:
                     record.update(h_std=window['h_std'] / window['diag'])
                     if 'moe_representation' in output:

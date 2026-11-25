@@ -31,6 +31,9 @@ VARIANTS = {
     "B4_c002": ("B2 + expert cost 0.02", "scripts/run_moe.py", "configs/nlimoe_ste_cost002.yaml", "nlimoe_paper_v5_ste_cost002_dynamic"),
     "B4_c01": ("B2 + expert cost 0.1", "scripts/run_moe.py", "configs/nlimoe_ste_cost01.yaml", "nlimoe_paper_v5_ste_cost01_dynamic"),
     "B3_r384": ("B3 with bottleneck r = 384", "scripts/run_moe.py", "configs/nlimoe_ste_bottleneck384.yaml", "nlimoe_paper_v5_ste_bottleneck384_dynamic"),
+    "B0_base": ("XLM-R Base (no MoE)", "scripts/run_xlmr.py", "configs/xlmr_base_v5.yaml", "xlmr_base_paper_v5"),
+    "B2_base": ("NLIMoE + STE on XLM-R Base", "scripts/run_moe.py", "configs/nlimoe_ste_base.yaml", "nlimoe_paper_v5_ste_base_dynamic"),
+    "B5_kd": ("B2_base distilled from B2 (Large)", "scripts/run_moe.py", "configs/nlimoe_ste_base_kd.yaml", "nlimoe_paper_v5_ste_base_kd_dynamic"),
 }
 
 

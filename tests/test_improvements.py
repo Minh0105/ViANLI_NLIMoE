@@ -98,6 +98,57 @@ class ImprovementTests(unittest.TestCase):
             self.assertEqual(changed(base, cfg), {key}, name)
             self.assertNotEqual(cfg['experiment']['name'], base['experiment']['name'])
 
+    def test_base_configs_change_only_the_backbone(self):
+        load = lambda name: yaml.safe_load(Path(f'configs/{name}.yaml').read_text(encoding='utf-8'))
+        large, base = load('xlmr_large'), load('xlmr_base_v5')
+        self.assertEqual(base['model']['backbone'], 'xlm-roberta-base')
+        self.assertEqual({k: v for k, v in base['model'].items() if k != 'backbone'},
+                         {k: v for k, v in large['model'].items() if k != 'backbone'})
+        self.assertEqual(base['training'], large['training'])
+        b2, b2_base, kd = load('nlimoe_ste'), load('nlimoe_ste_base'), load('nlimoe_ste_base_kd')
+        self.assertEqual(b2_base['model']['expected_hidden_size'], 768)
+        self.assertEqual(b2_base['training'], b2['training'])
+        self.assertEqual({k for k in b2['moe'] if b2['moe'][k] != b2_base['moe'][k]}, {'expert_hidden_dim'})
+        self.assertEqual(kd['model'], b2_base['model'])
+        self.assertEqual(kd['moe'], b2_base['moe'])
+        self.assertEqual({k: v for k, v in kd['training'].items() if k != 'distill'}, b2_base['training'])
+        self.assertEqual(set(kd['training']['distill']), {'teacher', 'alpha', 'temperature'})
+
+    def test_distillation(self):
+        from src.utils.training import distillation_loss
+        logits = torch.randn(4, 3)
+        self.assertAlmostEqual(float(distillation_loss(logits, logits, 2.0)), 0.0, places=5)
+        self.assertGreater(float(distillation_loss(logits, -logits, 2.0)), 0.0)
+        torch.manual_seed(0)
+        model = tiny_model('nlimoe_ste')
+        batches = []
+        for i in range(4):
+            ids, mask, labels = batch(4, seed=i)
+            batches.append({'uid': [f'u{i}_{j}' for j in range(4)], 'input_ids': ids, 'attention_mask': mask, 'label': labels})
+        teacher = {uid: torch.randn(3) for b in batches for uid in b['uid']}
+        with tempfile.TemporaryDirectory() as folder:
+            history = os.path.join(folder, 'run.jsonl')
+            train_with_validation(model, batches, 'cpu', torch.optim.AdamW(model.parameters(), lr=1e-3), None, 1,
+                                  {'log_every': 1, 'eval_frequency': 0, 'distill': {'alpha': 0.5, 'temperature': 2.0}},
+                                  lambda: {'accuracy': 0.5, 'macro_f1': 0.4}, os.path.join(folder, 'best.pt'),
+                                  history_path=history, teacher=teacher)
+            train = [json.loads(line) for line in Path(history).read_text(encoding='utf-8').splitlines()
+                     if json.loads(line)['type'] == 'train']
+        self.assertEqual(len(train), 4)
+        self.assertTrue(all(e['kd_loss'] > 0 for e in train))
+
+    def test_int8_quantized_moe_runs_on_cpu(self):
+        from scripts.efficiency import run, size_mb
+        torch.manual_seed(0)
+        model = tiny_model('nlimoe_ste').eval()
+        batches = [{'input_ids': ids, 'attention_mask': mask, 'label': labels}
+                   for ids, mask, labels in (batch(4, seed=i) for i in range(2))]
+        quantized = torch.ao.quantization.quantize_dynamic(model, {torch.nn.Linear}, dtype=torch.qint8)
+        accuracy, seconds = run(quantized, batches, torch.device('cpu'))
+        self.assertTrue(0.0 <= accuracy <= 1.0)
+        self.assertGreater(seconds, 0.0)
+        self.assertGreater(size_mb(model), 0.0)
+
     def test_expert_cost_reaches_threshold_only_with_ste(self):
         def gate_gradient_from_cost(config_name):
             torch.manual_seed(0)
@@ -157,6 +208,11 @@ class ImprovementTests(unittest.TestCase):
         self.assertEqual(variant_of(finished['experiment_name'][1]), 'B3')
         self.assertEqual(variant_of('nlimoe_paper_v5_ste_dynamic_seed7_20261120_101010_000003'), 'B2')
         self.assertEqual(variant_of('nlimoe_paper_v5_dynamic_dynamic_seed7_20261120_101010_000004'), 'B1')
+        self.assertEqual(variant_of('xlmr_base_paper_v5_seed42_20261126_101010_000005'), 'B0_base')
+        self.assertEqual(variant_of('nlimoe_paper_v5_ste_base_dynamic_seed42_20261126_101010_000006'), 'B2_base')
+        self.assertEqual(variant_of('nlimoe_paper_v5_ste_base_kd_dynamic_seed42_20261126_101010_000007'), 'B5_kd')
+        self.assertFalse(is_done('B2_base', 42, pd.DataFrame({'experiment_name': [
+            'nlimoe_paper_v5_ste_base_kd_dynamic_seed42_20261126_101010_000007']})))
 
     def test_queue_runs_jobs_in_parallel(self):
         import scripts.run_queue as rq

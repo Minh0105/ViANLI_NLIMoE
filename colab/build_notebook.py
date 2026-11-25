@@ -74,8 +74,9 @@ except Exception:
 md("## Runs")
 code(r"""
 import torch
-VARIANTS = ['B0', 'B1', 'B2', 'B3', 'A_topk', 'A_nobal',
-            'B2_T005', 'B2_T02', 'B4_c002', 'B4_c01', 'B3_r384']   # finished runs are skipped
+VARIANTS = ['B0_base', 'B2_base', 'B5_kd',                  # lightweight: XLM-R Base, distillation
+            'B4_c002', 'B4_c01', 'B2_T005', 'B2_T02', 'B3_r384',
+            'B0', 'B1', 'B2', 'B3', 'A_topk', 'A_nobal']   # finished runs are skipped
 SEEDS = [42, 123, 2026]
 PRECISION = 'auto'
 
@@ -87,6 +88,12 @@ print(f'{torch.cuda.get_device_name(0)}, {memory_gb:.0f} GB -> batch {BATCH} x {
 QUEUE_ARGS = ['--variants', *VARIANTS, '--seeds', *map(str, SEEDS), '--precision', PRECISION,
               '--batch_size', str(BATCH), '--grad_accum', str(ACCUM), '--parallel', str(PARALLEL)]
 !python scripts/run_queue.py {' '.join(QUEUE_ARGS)} --dry_run
+""")
+code(r"""
+# B5_kd learns from the B2 (XLM-R Large) models: save their logits on the training set once
+TEACHER = 'results/teacher/B2_large.pt'
+if 'B5_kd' in VARIANTS and not os.path.exists(TEACHER):
+    !python scripts/dump_teacher_logits.py --variants B2 --seeds 42 123 2026 --out {TEACHER}
 """)
 code(r"""
 PID_FILE = 'logs/queue.pid'
@@ -108,6 +115,16 @@ else:
                                cwd=PROJECT, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     open(PID_FILE, 'w').write(str(process.pid))
     print('started, pid', process.pid)
+""")
+code(r"""
+# stop the queue and its running jobs (run only when needed; unfinished runs restart from scratch)
+import signal
+pid = queue_pid()
+if pid:
+    os.killpg(os.getpgid(pid), signal.SIGTERM)
+    print('stopped queue', pid)
+else:
+    print('queue is not running')
 """)
 
 md("## Monitor")
@@ -155,6 +172,15 @@ for ax, name in zip(getattr(axes, 'flat', [axes]), names):
     viz.plot_confusion(name, ax=ax)
 fig_cm.tight_layout(); plt.show()
 display(viz.expert_parameter_table())
+""")
+
+md("## Efficiency")
+code(r"""
+# parameters, MACs per sentence, size fp32 / bf16 / int8, GPU and CPU latency; --int8_accuracy adds a slow CPU test pass
+import pandas as pd
+from IPython.display import display
+!python scripts/efficiency.py --variants B0 B2 B0_base B2_base B5_kd
+display(pd.read_csv('results/efficiency.csv').round(2))
 """)
 
 md("## Export")

@@ -28,7 +28,7 @@ from src.utils.logging_utils import append_to_summary, save_predictions
 from src.data.dataset import load_vianli_dataloaders, ID2LABEL
 from src.models.factory import build_moe_model
 from src.utils.training import (train_with_validation, save_run_config, resolve_precision,
-                                autocast_context, optimizer_steps_per_epoch, append_history)
+                                autocast_context, optimizer_steps_per_epoch, append_history, load_teacher)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train and evaluate NLIMoE Baseline")
@@ -261,9 +261,19 @@ def main():
         grads = [p.grad.float().norm() for p in gate.parameters() if p.grad is not None]
         return {"grad_norm_wc": float(torch.stack(grads).norm()) if grads else 0.0}
 
+    teacher = None
+    distill = cfg['training'].get('distill')
+    if distill:
+        teacher_path = os.path.join(project_dir, distill['teacher'])
+        if not os.path.exists(teacher_path):
+            raise FileNotFoundError(f"{teacher_path} not found; create it with scripts/dump_teacher_logits.py")
+        teacher = load_teacher(teacher_path)
+        print(f"distillation: {len(teacher)} teacher logits from {distill['teacher']}, "
+              f"alpha={distill.get('alpha', 0.5)}, T={distill.get('temperature', 2.0)}")
+
     best_val_metrics = train_with_validation(
         model, train_loader, device, optimizer, scheduler, epochs, cfg['training'],
-        validation, best_checkpoint_path, history_path=history_path, grad_probe=grad_probe)
+        validation, best_checkpoint_path, history_path=history_path, grad_probe=grad_probe, teacher=teacher)
     best_val_acc = best_val_metrics['accuracy']
 
     train_time = round(time.time() - start_time, 2)
@@ -313,6 +323,7 @@ def main():
         "inference_time": inference_time,
         "peak_gpu_memory": f"{peak_mem} GB",
         "notes": f"Routing: {routing_type} | {precision} | batch {batch_size}x{grad_accum}"
+                 + (f" | distilled from {distill['teacher']}" if distill else "")
     }
     append_to_summary(record, summary_csv)
     append_history(history_path, {"type": "test", "accuracy": test_metrics["accuracy"], "macro_f1": test_metrics["macro_f1"],

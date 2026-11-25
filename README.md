@@ -17,6 +17,8 @@ assumptions are listed in [analysis/paper_extraction.md](analysis/paper_extracti
 | `nlimoe_ste_t005.yaml`, `nlimoe_ste_t02.yaml` | B2 with STE temperature 0.05 / 0.2 |
 | `nlimoe_ste_cost002.yaml`, `nlimoe_ste_cost01.yaml` | B4 · B2 + λ · experts per sample in the loss (λ = 0.02 / 0.1) |
 | `nlimoe_ste_bottleneck384.yaml` | B3 with r = 384 |
+| `xlmr_base_v5.yaml`, `nlimoe_ste_base.yaml` | B0_base, B2_base · same settings on XLM-R Base (~half the compute of Large) |
+| `nlimoe_ste_base_kd.yaml` | B5_kd · B2_base distilled from the B2 Large models (`scripts/dump_teacher_logits.py`) |
 | `xlmr_base.yaml`, `lightweight_moe_experimental.yaml` | early experiments |
 
 Training follows Sec. 6.2: 7 epochs, batch 16, lr 1e-5, max length 256, dropout 0.4 (experts/head),
@@ -57,4 +59,5 @@ Colab: [colab/ViANLI_NLIMoE_colab.ipynb](colab/ViANLI_NLIMoE_colab.ipynb).
 | `logs/<run>.jsonl` | training history |
 | `checkpoints/<run>_best.pt` | best validation checkpoint and its config |
 
-Plots: `src/utils/viz.py`.
+Plots: `src/utils/viz.py`. Size and speed (parameters, MACs, fp32/bf16/int8 size, GPU/CPU latency,
+int8 accuracy): `python scripts/efficiency.py --variants B0 B2 B0_base B2_base B5_kd` → `results/efficiency.csv`.
