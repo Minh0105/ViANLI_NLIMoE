@@ -4,6 +4,24 @@ Cấu hình v5: encoder dropout 0,1, lr tuyến tính với 10% warmup, gradient
 (xem [paper_extraction.md](paper_extraction.md)). Tập kiểm thử ViANLI 1.000 câu; seed 42 / 123 / 2026;
 A100 40 GB, bf16, batch 16.
 
+## Mã thực nghiệm
+
+Báo cáo dùng mã E/A; tên trong code (cột cuối) giữ nguyên để hàng đợi nhận ra các lần chạy đã xong.
+
+| Mã | Mô hình | Vai trò | Tên trong code |
+|---|---|---|---|
+| E0 | XLM-R Large | Baseline | B0 |
+| E1 | NLIMoE (bài báo) | Baseline | B1 |
+| E2 | E1 + STE | Đề xuất chính | B2 |
+| E3a / E3b | E2 + bottleneck r = 256 / 384 | Lightweight | B3 / B3_r384 |
+| E4a / E4b | E2 + phạt số chuyên gia λ = 0,02 / 0,1 | Lightweight | B4_c002 / B4_c01 |
+| E5a / E5b | XLM-R Base / + MoE + STE | Lightweight | B0_base / B2_base |
+| E6 | E5b chưng cất từ E2 | Lightweight | B5_kd |
+| A1 / A2 | Top-K / bỏ L_bal | Ablation | A_topk / A_nobal |
+| A3a / A3b | STE T = 0,05 / 0,2 | Ablation | B2_T005 / B2_T02 |
+
+Các bảng dưới viết theo tên trong code: B0 = E0, B1 = E1, B2 = E2, B3 = E3a, A_topk = A1, A_nobal = A2.
+
 ## Accuracy và macro-F1 (trung bình ± độ lệch chuẩn mẫu)
 
 | Biến thể | Accuracy (%) | Macro-F1 (%) | Chuyên gia/câu | Accuracy từng seed |
