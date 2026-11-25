@@ -177,6 +177,7 @@ def main():
         exp_name = f"lightweight_experimental_{exp_name}"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.set_float32_matmul_precision("high")  # TF32 for the remaining fp32 matmuls
     precision = resolve_precision(args.precision or cfg["training"].get("precision", "fp32"), device)
     print(exp_name)
     print(f"config {args.config} | encoder_dropout={cfg['model'].get('encoder_dropout')} | "
@@ -232,7 +233,8 @@ def main():
                         if not name.startswith(('encoder.', 'router.', 'experts.'))]
     if other_parameters:
         optimizer_groups.append({'params': other_parameters, 'lr': lr_moe, 'weight_decay': weight_decay})
-    optimizer = AdamW(optimizer_groups, eps=float(cfg['training'].get('adam_epsilon', 1e-8)))
+    # fused kernel: same update, fewer GPU launches
+    optimizer = AdamW(optimizer_groups, eps=float(cfg['training'].get('adam_epsilon', 1e-8)), fused=device.type == "cuda")
     total_steps = optimizer_steps_per_epoch(train_loader, grad_accum) * epochs
     scheduler = None
     if cfg['training'].get('scheduler', 'linear') == 'linear':

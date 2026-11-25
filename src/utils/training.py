@@ -95,8 +95,18 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
     effective = batch_size * accumulation if batch_size else 'n/a'
     print(f"[Train] precision={precision} | grad_accumulation={accumulation} | effective batch={effective}")
 
+    # the best weights stay in CPU memory and are written once at the end: writing ~2 GB to
+    # Google Drive at every improvement costs minutes per run
+    best_state = None
+
+    def finish():
+        if best_state is not None:
+            torch.save(best_state, checkpoint_path)
+            print(f"  -> Saved best checkpoint to {checkpoint_path}")
+        return best
+
     def validate():
-        nonlocal best, stale
+        nonlocal best, stale, best_state
         with autocast_context(device, precision):
             metrics = evaluate()
         print(f"Step {global_step}: Val Acc: {metrics['accuracy']:.4f} | Val Macro-F1: {metrics['macro_f1']:.4f}")
@@ -104,8 +114,8 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
         if improved:
             best = dict(metrics)
             stale = 0
-            torch.save(model.state_dict(), checkpoint_path)
-            print(f"  -> Saved best checkpoint to {checkpoint_path}")
+            best_state = {k: v.detach().to('cpu', copy=True) for k, v in model.state_dict().items()}
+            print("  -> new best")
         else:
             stale += 1
         append_history(history_path, {
@@ -200,12 +210,12 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
                 window = dict.fromkeys(window, 0)
             if not sanity and frequency > 0 and global_step % frequency == 0:
                 if validate():
-                    return best
+                    return finish()
         print(f"Epoch {epoch}: Train Loss: {total_loss / num_batches:.4f}")
         if sanity or frequency == 0 or (epoch == epochs and global_step % frequency != 0):
             if validate():
-                return best
-    return best
+                return finish()
+    return finish()
 
 
 def save_run_config(cfg, checkpoint_path):

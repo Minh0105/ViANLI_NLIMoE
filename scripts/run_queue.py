@@ -87,6 +87,33 @@ def write_status(path, queue):
     os.replace(tmp, path)
 
 
+# peak GPU memory of one job at batch 16 in bf16 (measured ~11 GB for XLM-R Large on an A100), plus margin
+JOB_MEMORY_GB = {"xlm-roberta-large": 12.5, "xlm-roberta-base": 6.5}
+
+
+def job_memory_gb(variant):
+    import yaml
+    cfg = yaml.safe_load((PROJECT / VARIANTS[variant][2]).read_text(encoding="utf-8"))
+    return JOB_MEMORY_GB.get(cfg["model"]["backbone"], 12.5)
+
+
+def next_job(pending, active, args):
+    """Index of the first pending job that fits next to the running ones, or None.
+
+    With --gpu_memory_gb the jobs are packed by their memory estimate (on an L4, one Large and
+    one Base job, or three Base jobs); without it, at most --parallel jobs run.
+    """
+    if not pending or len(active) >= max(1, args.parallel):
+        return None
+    if args.gpu_memory_gb is None:
+        return 0
+    used = sum(job_memory_gb(item["variant"]) for item, _, _ in active)
+    for index, item in enumerate(pending):
+        if used + job_memory_gb(item["variant"]) <= args.gpu_memory_gb:
+            return index
+    return 0 if not active else None
+
+
 def command_for(variant, seed, args):
     _, script, config, _ = VARIANTS[variant]
     command = [sys.executable, "-u", script, "--config", config, "--seed", str(seed), "--precision", args.precision]
@@ -109,6 +136,8 @@ def main():
     parser.add_argument("--grad_accum", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None, help="Override epochs (for quick trials only)")
     parser.add_argument("--parallel", type=int, default=1, help="Jobs running at the same time on the GPU")
+    parser.add_argument("--gpu_memory_gb", type=float, default=None,
+                        help="Pack jobs by their memory estimate instead of counting them (up to --parallel)")
     parser.add_argument("--dry_run", action="store_true", help="Only print the plan")
     args = parser.parse_args()
 
@@ -132,8 +161,8 @@ def main():
     pending = [item for item in queue if item["state"] == "pending"]
     active = []  # (item, process, output file)
     while pending or active:
-        while pending and len(active) < max(1, args.parallel):
-            item = pending.pop(0)
+        while (index := next_job(pending, active, args)) is not None:
+            item = pending.pop(index)
             variant, seed = item["variant"], item["seed"]
             command = command_for(variant, seed, args)
             out_path = logs / f"{variant}_seed{seed}.out"
@@ -142,7 +171,7 @@ def main():
             active.append((item, subprocess.Popen(command, cwd=PROJECT, stdout=out, stderr=subprocess.STDOUT), out))
             write_status(status_path, queue)
             print(f">>> {variant} seed {seed}: {' '.join(command)}", flush=True)
-            if pending and len(active) < args.parallel:
+            if next_job(pending, active, args) is not None:
                 time.sleep(30)  # stagger model loading
         time.sleep(5)
         for entry in list(active):

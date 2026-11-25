@@ -103,6 +103,7 @@ def main():
     dynamic_padding = (not args.no_dynamic_padding) and cfg["data"].get("dynamic_padding", True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    torch.set_float32_matmul_precision("high")  # TF32 for the remaining fp32 matmuls
     precision = resolve_precision(args.precision or cfg["training"].get("precision", "fp32"), device)
     print(exp_name)
     print(f"config {args.config} | encoder_dropout={cfg['model'].get('encoder_dropout')} | "
@@ -145,7 +146,8 @@ def main():
             "weight_decay": 0.0
         }
     ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=lr, eps=float(cfg['training'].get('adam_epsilon', 1e-8)))
+    optimizer = AdamW(optimizer_grouped_parameters, lr=lr, eps=float(cfg['training'].get('adam_epsilon', 1e-8)),
+                      fused=device.type == "cuda")
     total_steps = optimizer_steps_per_epoch(train_loader, grad_accum) * epochs
     warmup_steps = int(total_steps * cfg["training"].get("warmup_ratio", 0.1))
     scheduler = None

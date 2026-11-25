@@ -137,6 +137,45 @@ class ImprovementTests(unittest.TestCase):
         self.assertEqual(len(train), 4)
         self.assertTrue(all(e['kd_loss'] > 0 for e in train))
 
+    def test_queue_packs_jobs_by_memory(self):
+        import argparse
+        import scripts.run_queue as rq
+        self.assertEqual(rq.job_memory_gb('B2'), 12.5)
+        self.assertEqual(rq.job_memory_gb('B2_base'), 6.5)
+        item = lambda v: {'variant': v}
+        running = lambda *vs: [(item(v), None, None) for v in vs]
+        l4 = argparse.Namespace(parallel=3, gpu_memory_gb=21.5)
+        pending = [item('B4_c002'), item('B2_base'), item('B5_kd')]
+        self.assertEqual(rq.next_job(pending, [], l4), 0)                        # first job always starts
+        self.assertEqual(rq.next_job(pending, running('B4_c01'), l4), 1)         # Large + Base fits, Large + Large does not
+        self.assertIsNone(rq.next_job(pending, running('B4_c01', 'B0_base'), l4))
+        self.assertEqual(rq.next_job([item('B5_kd')], running('B0_base', 'B2_base'), l4), 0)  # three Base jobs
+        self.assertIsNone(rq.next_job(pending, running('B0_base', 'B2_base', 'B5_kd'), l4))   # --parallel cap
+        a100 = argparse.Namespace(parallel=3, gpu_memory_gb=38.6)
+        self.assertEqual(rq.next_job(pending, running('B4_c01', 'B2_T02'), a100), 0)
+        by_count = argparse.Namespace(parallel=2, gpu_memory_gb=None)
+        self.assertEqual(rq.next_job(pending, running('B4_c01'), by_count), 0)
+        self.assertIsNone(rq.next_job(pending, running('B4_c01', 'B2_T02'), by_count))
+
+    def test_best_checkpoint_is_written_once_with_best_weights(self):
+        torch.manual_seed(0)
+        model = tiny_model('nlimoe_ste')
+        batches = [dict(zip(('input_ids', 'attention_mask', 'label'), batch(4, seed=i))) for i in range(4)]
+        scores = iter([0.6, 0.4])  # first validation is the best
+        snapshots = []
+
+        def evaluate():
+            snapshots.append({k: v.clone() for k, v in model.state_dict().items()})
+            return {'accuracy': next(scores), 'macro_f1': 0.3}
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, 'best.pt')
+            train_with_validation(model, batches, 'cpu', torch.optim.AdamW(model.parameters(), lr=1e-2), None, 1,
+                                  {'eval_frequency': 2}, evaluate, path)
+            saved = torch.load(path, weights_only=True)
+        self.assertEqual(len(snapshots), 2)
+        for key, value in saved.items():
+            torch.testing.assert_close(value, snapshots[0][key])
+
     def test_int8_quantized_moe_runs_on_cpu(self):
         from scripts.efficiency import run, size_mb
         torch.manual_seed(0)
