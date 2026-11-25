@@ -121,16 +121,6 @@ else:
     open(PID_FILE, 'w').write(str(process.pid))
     print('started, pid', process.pid)
 """)
-code(r"""
-# stop the queue and its running jobs (run only when needed; unfinished runs restart from scratch)
-import signal
-pid = queue_pid()
-if pid:
-    os.killpg(os.getpgid(pid), signal.SIGTERM)
-    print('stopped queue', pid)
-else:
-    print('queue is not running')
-""")
 
 md("## Monitor")
 code(r"""
@@ -206,6 +196,28 @@ if not USE_DRIVE:
     from google.colab import files
     shutil.make_archive('/content/results', 'zip', PROJECT, '.')
     files.download('/content/results.zip')
+""")
+
+md("## Tools (run only when needed)")
+code(r"""
+# what is running: queue log, processes, GPU memory
+!tail -40 logs/queue.out
+!ps aux | grep -E "run_queue|run_moe|run_xlmr" | grep -v grep
+!ls -lt logs | head -8
+!nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv
+""")
+code(r"""
+# stop the queue and its jobs: set STOP = True and run (unfinished runs restart from scratch)
+STOP = False
+import signal
+pid = queue_pid()
+if not STOP:
+    print('STOP is False: nothing done', '(queue running, pid %d)' % pid if pid else '(queue not running)')
+elif pid:
+    os.killpg(os.getpgid(pid), signal.SIGTERM)
+    print('stopped queue', pid)
+else:
+    print('queue is not running')
 """)
 
 notebook = {"cells": cells,
