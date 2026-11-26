@@ -61,7 +61,14 @@ git('checkout', '-q', '-f', '-B', BRANCH, 'FETCH_HEAD')
 print(git('log', '-1', '--format=%h %s'))
 
 os.chdir(PROJECT)
-sys.path.insert(0, PROJECT)
+if PROJECT not in sys.path:
+    sys.path.insert(0, PROJECT)
+# a kernel that ran an older checkout keeps the old scripts / src modules in memory: drop them
+stale = [m for m in sys.modules if m in ('scripts', 'src') or m.startswith(('scripts.', 'src.'))]
+for name in stale:
+    del sys.modules[name]
+if stale:
+    print(f'reloaded {len(stale)} project modules')
 !nvidia-smi --query-gpu=name,memory.total --format=csv
 """)
 code(r"""
