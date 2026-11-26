@@ -1,0 +1,59 @@
+# A5 (A_1exp): one Linear 1024-1024 expert, always on (no routing); mean + LayerNorm as in NLIMoE
+experiment:
+  name: nlimoe_paper_v5_single_expert
+  description: "A5 = E1 with a single dense expert: tests whether 7 routed experts add anything over one FFN; everything else identical to nlimoe_dynamic.yaml"
+
+data:
+  dataset_name: "uitnlp/ViANLI"
+  max_length: 256
+  premise_col: "premise"
+  hypothesis_col: "hypothesis"
+  label_col: "label"
+
+model:
+  architecture: "paper_nlimoe_v3"
+  backbone: "xlm-roberta-large" # d=1024 in the paper
+  expected_hidden_size: 1024
+  num_labels: 3
+  pooling: "mean"
+  dropout: 0.4
+  encoder_dropout: null # XLM-R default 0.1; dropout 0.4 only in experts / head
+
+moe:
+  num_experts: 1
+  expert_hidden_dim: 1024
+  router_type: "linear"
+  routing_type: "dense" # the single expert is always used
+  top_k: 1 # unused for dense routing
+  threshold: 0.1
+  gamma: 0.1
+  dynamic_loss_weight: 0.001
+  balance_loss_weight: 0.01
+  threshold_gradient: "hard"
+  empty_selection_policy: "zero" # not reported
+
+training:
+  seed: 42
+  lr_backbone: 1.0e-5
+  lr_moe: 1.0e-5
+  weight_decay: 0.0
+  adam_epsilon: 1.0e-8
+  batch_size: 16
+  epochs: 7
+  eval_frequency: 400
+  scheduler: "linear" # not reported
+  warmup_ratio: 0.1 # not reported
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0 # not reported; Hugging Face Trainer default
+  early_stopping_patience: 0 # not reported
+
+provenance:
+  source: "https://arxiv.org/html/2406.17716v3"
+  architecture: "Section 5, equations 2-16"
+  training: "Section 6.2"
+  unresolved: ["exact checkpoint identifier", "hard-mask gradient estimator", "empty selection", "optimizer class", "scheduler", "seed", "dense baseline head"]
+
+evaluation:
+  primary_metric: "accuracy"
+  secondary_metric: "macro_f1"
+  save_best_checkpoint: true

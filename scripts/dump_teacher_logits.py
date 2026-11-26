@@ -38,7 +38,9 @@ def build(variant, cfg):
         model = cfg["model"]
         return XLMRobertaNLI(backbone_name=model["backbone"], num_labels=model.get("num_labels", 3),
                              dropout_prob=model.get("dropout", 0.1), pooling=model.get("pooling", "cls"),
-                             encoder_dropout=model.get("encoder_dropout"))
+                             encoder_dropout=model.get("encoder_dropout"),
+                             use_layer_norm=model.get("use_layer_norm", False),
+                             class_weights=cfg.get("training", {}).get("class_weights"))
     moe = cfg["moe"]
     return build_moe_model(cfg, moe.get("routing_type"), moe.get("top_k"), moe.get("threshold"))
 

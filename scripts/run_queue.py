@@ -34,7 +34,21 @@ VARIANTS = {
     "B0_base": ("XLM-R Base (no MoE)", "scripts/run_xlmr.py", "configs/xlmr_base_v5.yaml", "xlmr_base_paper_v5"),
     "B2_base": ("NLIMoE + STE on XLM-R Base", "scripts/run_moe.py", "configs/nlimoe_ste_base.yaml", "nlimoe_paper_v5_ste_base_dynamic"),
     "B5_kd": ("B2_base distilled from B2 (Large)", "scripts/run_moe.py", "configs/nlimoe_ste_base_kd.yaml", "nlimoe_paper_v5_ste_base_kd_dynamic"),
+    # P2 (REVISION_PLAN.md): opt-in additions, the v5 variants above are unchanged
+    "A_mean_ln": ("Ablation: XLM-R Large + mean pooling + LayerNorm", "scripts/run_xlmr.py", "configs/xlmr_large_mean_ln.yaml", "xlmr_large_mean_ln_paper_v5"),
+    "A_1exp": ("Ablation: one dense expert, no routing", "scripts/run_moe.py", "configs/nlimoe_single_expert.yaml", "nlimoe_paper_v5_single_expert_dense"),
+    "B2_safe": ("B2 with bounded STE gradient on empty selection", "scripts/run_moe.py", "configs/nlimoe_ste_safe_empty.yaml", "nlimoe_paper_v5_ste_safe_empty_dynamic"),
+    "B3_res256": ("B3 with residual bottleneck r = 256", "scripts/run_moe.py", "configs/nlimoe_ste_res_bottleneck256.yaml", "nlimoe_paper_v5_ste_res_bottleneck256_dynamic"),
+    "B2_cw": ("B2 + class weight 1.2 for contradiction", "scripts/run_moe.py", "configs/nlimoe_ste_cw.yaml", "nlimoe_paper_v5_ste_cw_dynamic"),
+    "B5_kd_ens": ("B2_base distilled from the B0 + B2 ensemble", "scripts/run_moe.py", "configs/nlimoe_ste_base_kd_ens.yaml", "nlimoe_paper_v5_ste_base_kd_ens_dynamic"),
+    "B2_kd_ens": ("B2 (Large) distilled from the B0 + B2 ensemble", "scripts/run_moe.py", "configs/nlimoe_ste_large_kd_ens.yaml", "nlimoe_paper_v5_ste_large_kd_ens_dynamic"),
 }
+V5_VARIANTS = ["B0", "B1", "B2", "B3", "A_topk", "A_nobal", "B2_T005", "B2_T02", "B4_c002", "B4_c01", "B3_r384",
+               "B0_base", "B2_base", "B5_kd"]
+P2_VARIANTS = ["A_mean_ln", "A_1exp", "B2_safe", "B3_res256", "B2_cw", "B5_kd_ens", "B2_kd_ens"]
+# teacher logits a distilled variant needs before it can start
+TEACHERS = {"B5_kd": "results/teacher/B2_large.pt", "B5_kd_ens": "results/teacher/B0_B2_large.pt",
+            "B2_kd_ens": "results/teacher/B0_B2_large.pt"}
 
 
 def experiment_prefix(variant):
@@ -114,11 +128,18 @@ def next_job(pending, active, args):
     return 0 if not active else None
 
 
+def routing_of(variant):
+    """Routing type written in the variant's config (dynamic, top_k or dense)."""
+    import yaml
+    cfg = yaml.safe_load((PROJECT / VARIANTS[variant][2]).read_text(encoding="utf-8"))
+    return cfg["moe"].get("routing_type", "dynamic")
+
+
 def command_for(variant, seed, args):
     _, script, config, _ = VARIANTS[variant]
     command = [sys.executable, "-u", script, "--config", config, "--seed", str(seed), "--precision", args.precision]
     if script.endswith("run_moe.py"):
-        command += ["--routing_type", "top_k" if variant == "A_topk" else "dynamic"]
+        command += ["--routing_type", routing_of(variant)]
     for flag, value in (("--batch_size", args.batch_size), ("--grad_accum", args.grad_accum), ("--epochs", args.epochs)):
         if value is not None:
             command += [flag, str(value)]
@@ -126,6 +147,11 @@ def command_for(variant, seed, args):
 
 
 def main():
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except AttributeError:
+            pass
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--variants", nargs="+", default=["B0", "B1", "B2", "B3"], choices=list(VARIANTS))
     parser.add_argument("--seeds", nargs="+", type=int, default=[42])
@@ -153,7 +179,7 @@ def main():
     queue = [{"variant": v, "seed": s, "description": VARIANTS[v][0], "settings": settings(v),
               "state": "done" if is_done(v, s, finished) else "pending"} for v, s in plan]
     for item in queue:
-        print(f"  {item['variant']:7s} seed {item['seed']:<5d} {item['state']:8s} {item['settings']:48s} {item['description']}")
+        print(f"  {item['variant']:9s} seed {item['seed']:<5d} {item['state']:8s} {item['settings']:48s} {item['description']}")
     if args.dry_run:
         return
     write_status(status_path, queue)

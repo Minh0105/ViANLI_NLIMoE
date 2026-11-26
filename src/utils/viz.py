@@ -13,7 +13,12 @@ import matplotlib.pyplot as plt
 PROJECT = Path(__file__).resolve().parents[2]
 LABELS = ["entailment", "neutral", "contradiction"]
 VARIANT_ORDER = ["B0", "B1", "B2", "B3", "A_topk", "A_nobal", "B2_T005", "B2_T02", "B4_c002", "B4_c01", "B3_r384",
-                 "B0_base", "B2_base", "B5_kd"]
+                 "B0_base", "B2_base", "B5_kd",
+                 # P2 additions (REVISION_PLAN.md): confound ablations, residual bottleneck, class weights, ensemble KD
+                 "A_mean_ln", "A_1exp", "B2_safe", "B3_res256", "B2_cw", "B5_kd_ens", "B2_kd_ens"]
+# the 14 variants x 3 seeds of the v5 study
+V5_VARIANTS = VARIANT_ORDER[:14]
+NO_MOE_VARIANTS = ("B0", "B0_base", "A_mean_ln")
 # display codes used in the report: E0, E1 baselines; E2-E6 our experiments; A1-A3 ablations
 VARIANT_NAMES = {
     "B0": "E0 · XLM-R Large (baseline)",
@@ -30,11 +35,34 @@ VARIANT_NAMES = {
     "A_nobal": "A2 · bỏ L_bal",
     "B2_T005": "A3a · T = 0,05",
     "B2_T02": "A3b · T = 0,2",
+    "A_mean_ln": "A4 · XLM-R Large + mean + LN",
+    "A_1exp": "A5 · 1 chuyên gia, không định tuyến",
+    "B2_safe": "A6 · E2, gradient an toàn khi rỗng",
+    "B3_res256": "E3c · residual bottleneck r = 256",
+    "B2_cw": "E7 · E2 + trọng số lớp C 1,2",
+    "B5_kd_ens": "E8a · E5b chưng cất từ E0+E2",
+    "B2_kd_ens": "E8b · E2 chưng cất từ E0+E2",
 }
 COLORS = {"B0": "#5A6474", "B1": "#2350A8", "B2": "#C2551B", "B3": "#2E8B57",
           "A_topk": "#8E6CC4", "A_nobal": "#B8860B", "B2_T005": "#E08A5A", "B2_T02": "#8C3A10",
           "B4_c002": "#4FA3A5", "B4_c01": "#1F6E70", "B3_r384": "#7BBF8E",
-          "B0_base": "#9AA6BF", "B2_base": "#F2A65A", "B5_kd": "#D9480F"}
+          "B0_base": "#9AA6BF", "B2_base": "#F2A65A", "B5_kd": "#D9480F",
+          "A_mean_ln": "#3D4452", "A_1exp": "#6C8EBF", "B2_safe": "#F0B27A", "B3_res256": "#1B5E3A",
+          "B2_cw": "#A52A2A", "B5_kd_ens": "#E8590C", "B2_kd_ens": "#7A1F00"}
+
+
+def code_of(variant):
+    """Report code of a variant, e.g. 'E2' for B2."""
+    return VARIANT_NAMES.get(variant, variant).split(" · ")[0]
+
+
+def _code_key(variant):
+    match = re.match(r"([EA])(\d+)([a-z]?)", code_of(variant))
+    return (match.group(1) != "E", int(match.group(2)), match.group(3)) if match else (True, 99, variant)
+
+
+# report order: E0, E1, E2, E3a, ..., then A1, A2, ...
+REPORT_ORDER = sorted(VARIANT_ORDER, key=_code_key)
 PAPER = {"B0": 0.455, "B1": 0.473}
 
 
@@ -316,7 +344,7 @@ def results_table(summary):
             "Test acc (%)": f"{acc.mean():.2f} ± {acc.std(ddof=1):.2f}" if len(group) > 1 else f"{acc.mean():.2f}",
             "Macro-F1 (%)": f"{f1.mean():.2f} ± {f1.std(ddof=1):.2f}" if len(group) > 1 else f"{f1.mean():.2f}",
             "Val acc (%)": f"{group['val_accuracy'].mean() * 100:.2f}",
-            "Chuyên gia/câu": f"{experts.mean():.2f}" if variant != "B0" else "—",
+            "Chuyên gia/câu": f"{experts.mean():.2f}" if variant not in NO_MOE_VARIANTS else "—",
             "Bài báo (%)": f"{PAPER[variant] * 100:.1f}" if variant in PAPER else "—",
         })
     return pd.DataFrame(rows)
@@ -458,7 +486,22 @@ def mcnemar(name_a, name_b, project=PROJECT):
             "chỉ A đúng": only_a, "chỉ B đúng": only_b, "p_value": p}
 
 
-def mcnemar_table(summary, pairs=(("B0", "B1"), ("B1", "B2"), ("B2", "B3")), project=PROJECT):
+# main comparisons (A, B): the difference is reported as B - A
+DEFAULT_PAIRS = (
+    ("B0", "B1"), ("B1", "B2"), ("B0", "B2"),
+    ("B2", "B3"), ("B2", "B3_r384"), ("B3", "B3_r384"),
+    ("B2", "B4_c002"), ("B2", "B4_c01"),
+    ("B0_base", "B2_base"), ("B1", "B2_base"), ("B0", "B2_base"),
+    ("B2_base", "B5_kd"), ("B0", "B5_kd"),
+    ("B1", "A_topk"), ("B2", "A_nobal"),
+    ("B2", "B2_T005"), ("B2", "B2_T02"),
+)
+# comparisons for the P2 runs, used once they exist
+P2_PAIRS = (("B0", "A_mean_ln"), ("A_mean_ln", "A_1exp"), ("A_1exp", "B1"), ("B2", "B2_safe"),
+            ("B3", "B3_res256"), ("B2", "B3_res256"), ("B2", "B2_cw"), ("B5_kd", "B5_kd_ens"), ("B2", "B2_kd_ens"))
+
+
+def mcnemar_table(summary, pairs=DEFAULT_PAIRS, project=PROJECT):
     rows = []
     for seed in sorted(summary["seed"].unique()):
         names = summary[summary["seed"] == seed].set_index("variant")["experiment_name"]
@@ -490,11 +533,194 @@ def plot_confusion(experiment_name, project=PROJECT, ax=None):
     return ax.figure
 
 
-def expert_parameter_table(hidden=1024, experts=7, bottleneck=256):
+# total parameters of the pretrained backbones (with embeddings)
+BACKBONE_PARAMS = {"XLM-R Large": 560e6, "XLM-R Base": 278e6}
+
+
+def expert_parameter_table(hidden=1024, experts=7, bottlenecks=(256, 384)):
+    """Expert parameters per expert and for all experts, change against Linear d->d, and share of the
+    whole model (backbone + experts) for XLM-R Large and XLM-R Base."""
     linear = hidden * hidden + hidden
-    narrow = (hidden * bottleneck + bottleneck) + (bottleneck * hidden + hidden)
-    return pd.DataFrame([
-        {"Chuyên gia": "Linear 1024→1024 (B1, B2)", "Tham số / chuyên gia": f"{linear:,}", "× 7": f"{linear * experts:,}", "Thay đổi": "—"},
-        {"Chuyên gia": "Bottleneck 1024→256→1024 (B3)", "Tham số / chuyên gia": f"{narrow:,}", "× 7": f"{narrow * experts:,}",
-         "Thay đổi": f"{(narrow / linear - 1) * 100:.1f}%"},
-    ])
+    rows = [("Linear %d→%d (E1, E2)" % (hidden, hidden), linear)]
+    for r in bottlenecks:
+        narrow = (hidden * r + r) + (r * hidden + hidden)
+        code = {256: "E3a, E3c", 384: "E3b"}.get(r, "")
+        rows.append((f"Bottleneck {hidden}→{r}→{hidden}" + (f" ({code})" if code else ""), narrow))
+    table = []
+    for name, each in rows:
+        total = each * experts
+        row = {"Chuyên gia": name, "Tham số / chuyên gia": f"{each:,}", f"× {experts}": f"{total:,}",
+               "Thay đổi": "—" if each == linear else f"{(each / linear - 1) * 100:.1f}%"}
+        for backbone, params in BACKBONE_PARAMS.items():
+            row[f"% toàn mô hình ({backbone})"] = f"{100 * total / (params + total):.2f}%"
+        table.append(row)
+    return pd.DataFrame(table)
+
+
+# ---------------------------------------------------------------------------------------------------------
+# Statistics over seeds (REVISION_PLAN P0.5). Predictions are matched on uid; a missing file raises
+# MissingData with the expected path, so callers can say which file to copy from Google Drive.
+
+class MissingData(FileNotFoundError):
+    """An input file (prediction, routing or log) is not on disk."""
+
+
+LABEL_INDEX = {name: i for i, name in enumerate(LABELS)}
+
+
+def runs_of(summary, variant):
+    """{seed: experiment_name} of a variant; the latest run wins if a seed was run twice."""
+    group = summary[summary["variant"] == variant].sort_values("experiment_name")
+    return {int(seed): name for seed, name in zip(group["seed"], group["experiment_name"])}
+
+
+def load_predictions(experiment_name, project=PROJECT):
+    path = Path(project) / "predictions" / f"{experiment_name}.csv"
+    if not path.exists():
+        raise MissingData(f"missing predictions/{experiment_name}.csv")
+    return pd.read_csv(path)
+
+
+def prediction_arrays(summary, variant, project=PROJECT, seeds=None):
+    """Aligned arrays of one variant over its seeds.
+
+    Returns dict with uids (n,), gold (n,) label indices, pred (S, n), correct (n, S), probs (S, n, 3), seeds.
+    Sentences are the uids present in every run, in the order of the first run.
+    """
+    runs = runs_of(summary, variant)
+    if seeds is not None:
+        runs = {s: n for s, n in runs.items() if s in set(seeds)}
+    if not runs:
+        raise MissingData(f"no finished run of {variant} in results/summary.csv")
+    frames = {seed: load_predictions(name, project).drop_duplicates("uid").set_index("uid")
+              for seed, name in sorted(runs.items())}
+    common = None
+    for frame in frames.values():
+        common = set(frame.index) if common is None else common & set(frame.index)
+    first = next(iter(frames.values()))
+    uids = [u for u in first.index if u in common]
+    prob_cols = [f"prob_{label}" for label in LABELS]
+    pred = np.stack([frames[s].loc[uids, "pred_label"].map(LABEL_INDEX).to_numpy() for s in frames])
+    probs = np.stack([frames[s].loc[uids, prob_cols].to_numpy(float) for s in frames])
+    gold = first.loc[uids, "gold_label"].map(LABEL_INDEX).to_numpy()
+    return {"uids": np.array(uids), "gold": gold, "pred": pred, "correct": (pred == gold).T.astype(int),
+            "probs": probs, "seeds": list(frames)}
+
+
+def _aligned(summary, variant_a, variant_b, project, seeds=None):
+    a = prediction_arrays(summary, variant_a, project, seeds)
+    b = prediction_arrays(summary, variant_b, project, seeds)
+    in_b = set(b["uids"])
+    common = [u for u in a["uids"] if u in in_b]
+    index_a = {u: i for i, u in enumerate(a["uids"])}
+    index_b = {u: i for i, u in enumerate(b["uids"])}
+    ia, ib = [index_a[u] for u in common], [index_b[u] for u in common]
+
+    def take(arrays, idx):
+        return {"gold": arrays["gold"][idx], "pred": arrays["pred"][:, idx], "correct": arrays["correct"][idx],
+                "probs": arrays["probs"][:, idx], "seeds": arrays["seeds"]}
+    return take(a, ia), take(b, ib), np.array(common)
+
+
+def clustered_bootstrap_test(summary, variant_a, variant_b, n_boot=10_000, seed=42, project=PROJECT):
+    """Difference B - A in accuracy with the test sentence as the resampling unit (the official test).
+
+    Per sentence, accuracy over the seeds of each variant is averaged; the n sentence-level differences
+    are resampled n_boot times. Returns mean_diff, ci_95_low, ci_95_high, p_value_two_sided (sign-flip
+    permutation), p_bootstrap_two_sided, acc_a, acc_b and wins (seeds where B beats A).
+    """
+    from src.utils.stats import clustered_bootstrap
+    a, b, _ = _aligned(summary, variant_a, variant_b, project)
+    result = clustered_bootstrap(a["correct"], b["correct"], n_boot=n_boot, seed=seed)
+    shared = sorted(set(a["seeds"]) & set(b["seeds"]))
+    acc = lambda arrays, s: arrays["correct"][:, arrays["seeds"].index(s)].mean()
+    wins = sum(acc(b, s) > acc(a, s) for s in shared)
+    result.update(variant_a=variant_a, variant_b=variant_b, acc_a=float(a["correct"].mean()),
+                  acc_b=float(b["correct"].mean()), wins=f"{wins}/{len(shared)}")
+    return result
+
+
+def ensemble_mcnemar(summary, variant_a, variant_b, project=PROJECT):
+    """Exact McNemar between the probability-averaged ensembles of the two variants (n independent pairs)."""
+    from src.utils.stats import ensemble_predictions, exact_mcnemar
+    a, b, _ = _aligned(summary, variant_a, variant_b, project)
+    right_a = ensemble_predictions(a["probs"]) == a["gold"]
+    right_b = ensemble_predictions(b["probs"]) == b["gold"]
+    result = exact_mcnemar(right_a, right_b)
+    result.update(variant_a=variant_a, variant_b=variant_b, ensemble_acc_a=float(right_a.mean()),
+                  ensemble_acc_b=float(right_b.mean()))
+    return result
+
+
+def pooled_mcnemar(summary, variant_a, variant_b, project=PROJECT):
+    """Exact McNemar over seed-matched pairs pooled across seeds (S x n pairs).
+
+    Reference only: the same sentence appears once per seed, so the pairs are not independent and the
+    p-value is too small. Draw conclusions from clustered_bootstrap_test or ensemble_mcnemar.
+    """
+    from src.utils.stats import exact_mcnemar
+    a, b, _ = _aligned(summary, variant_a, variant_b, project)
+    shared = sorted(set(a["seeds"]) & set(b["seeds"]))
+    if not shared:
+        raise MissingData(f"{variant_a} and {variant_b} have no seed in common")
+    right_a = np.concatenate([a["correct"][:, a["seeds"].index(s)] for s in shared]).astype(bool)
+    right_b = np.concatenate([b["correct"][:, b["seeds"].index(s)] for s in shared]).astype(bool)
+    result = exact_mcnemar(right_a, right_b)
+    result.update(variant_a=variant_a, variant_b=variant_b, seeds=shared,
+                  note="reference only: pairs from different seeds share sentences")
+    return result
+
+
+def per_class_recall_table(summary, project=PROJECT, variants=None):
+    """Recall per class (mean and std over seeds) and the number of seeds with a collapsed class
+    (a class predicted for fewer than 5% of the test sentences)."""
+    from src.utils.stats import collapsed_classes, recall_per_class
+    rows = []
+    for variant in variants or [v for v in VARIANT_ORDER if v in set(summary["variant"])]:
+        arrays = prediction_arrays(summary, variant, project)
+        recalls = np.array([recall_per_class(arrays["gold"], p) for p in arrays["pred"]]) * 100
+        collapsed = [collapsed_classes(p) for p in arrays["pred"]]
+        row = {"variant": variant, "code": code_of(variant), "seeds": len(arrays["seeds"])}
+        for c, label in enumerate(LABELS):
+            values = recalls[:, c]
+            row[f"recall_{label}"] = float(values.mean())
+            row[f"recall_{label}_std"] = float(values.std(ddof=1)) if len(values) > 1 else 0.0
+        row["collapsed_seeds"] = sum(bool(c) for c in collapsed)
+        row["collapsed_classes"] = "; ".join(f"seed {s}: {','.join(LABELS[i] for i in c)}"
+                                             for s, c in zip(arrays["seeds"], collapsed) if c)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def spearman_summary_table(summary, project=PROJECT, variants=None):
+    """Per run of every variant with a learned threshold: Spearman rho(C, wrong) and rho(C, n_experts)
+    with p-values, accuracy and experts per sentence in the low / mid / high tertile of C, and the share
+    of sentences with an empty selection. Variants without C in their routing file are skipped."""
+    rows = []
+    for variant in variants or [v for v in VARIANT_ORDER if v in set(summary["variant"])]:
+        if variant in NO_MOE_VARIANTS:
+            continue
+        for seed, name in sorted(runs_of(summary, variant).items()):
+            frame = routing_frame(name, project)
+            if frame is None:
+                raise MissingData(f"missing results/routing_stats/{name}_per_sample.csv")
+            if "complexity" not in frame:
+                continue
+            wrong = 1 - frame["correct"]
+            row = {"variant": variant, "code": code_of(variant), "seed": seed}
+            row["rho_C_wrong"], row["p_C_wrong"] = spearman(frame["complexity"], wrong)
+            if frame["n_experts"].nunique() > 1:
+                row["rho_C_experts"], row["p_C_experts"] = spearman(frame["complexity"], frame["n_experts"])
+            else:
+                row["rho_C_experts"], row["p_C_experts"] = float("nan"), float("nan")
+            tertile = pd.qcut(frame["complexity"].rank(method="first"), 3, labels=["low", "mid", "high"])
+            for part in ("low", "mid", "high"):
+                chosen = frame[tertile == part]
+                row[f"acc_C_{part}"] = float(chosen["correct"].mean() * 100)
+                row[f"experts_C_{part}"] = float(chosen["n_experts"].mean())
+                row[f"C_{part}_mean"] = float(chosen["complexity"].mean())
+            row["mean_C"] = float(frame["complexity"].mean())
+            row["empty_selection_pct"] = float((frame["n_experts"] == 0).mean() * 100)
+            row["avg_experts"] = float(frame["n_experts"].mean())
+            rows.append(row)
+    return pd.DataFrame(rows)

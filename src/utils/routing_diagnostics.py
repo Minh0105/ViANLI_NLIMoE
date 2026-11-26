@@ -45,6 +45,10 @@ def compute_routing_diagnostics(
         "avg_expert_weights": {f"expert_{i}": float(avg_expert_weights[i]) for i in range(num_experts)},
         "collapse_warning": collapse_warning,
         "avg_experts_per_sample": avg_experts_per_sample,
+        "min_experts_per_sample": int(experts_per_sample.min()) if batch_size else 0,
+        "max_experts_per_sample": int(experts_per_sample.max()) if batch_size else 0,
+        # samples with no expert above the threshold (their MoE vector is zero under policy 'zero')
+        "empty_selection_pct": float(np.mean(experts_per_sample == 0) * 100.0) if batch_size else 0.0,
         "mean_routing_entropy": mean_routing_entropy
     }
 

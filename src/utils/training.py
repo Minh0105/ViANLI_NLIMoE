@@ -67,16 +67,30 @@ def distillation_loss(student_logits, teacher_logits, temperature):
         reduction='batchmean') * t * t
 
 
+def blend_distillation(loss, task_loss, kd, alpha, blend_aux=True):
+    """Total loss with knowledge distillation.
+
+    blend_aux=True (default, the E6 runs): (1 - alpha) * L_NLIMoE + alpha * KD, where
+        L_NLIMoE = CE + w_d * L_dyn + w_b * L_bal (+ cost), so the auxiliary terms are also scaled by 1 - alpha.
+    blend_aux=False: (1 - alpha) * CE + alpha * KD + (L_NLIMoE - CE), auxiliary terms at full weight.
+    KD = T^2 * KL(softmax(z_teacher / T) || softmax(z_student / T)).
+    """
+    if blend_aux or task_loss is None:
+        return (1 - alpha) * loss + alpha * kd
+    return (1 - alpha) * task_loss + alpha * kd + (loss - task_loss)
+
+
 def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
                           training, evaluate, checkpoint_path, sanity=False,
                           history_path=None, grad_probe=None, teacher=None):
     """Train for `epochs`, validate every `eval_frequency` optimizer steps, keep the best checkpoint.
 
-    teacher: {uid: logits}; with it the loss is (1 - alpha) * loss + alpha * distillation loss,
-    alpha and temperature taken from training['distill'].
+    teacher: {uid: logits}; with it the loss is mixed with the distillation loss by blend_distillation,
+    alpha, temperature and blend_aux taken from training['distill'].
     """
     distill = training.get('distill') or {}
     alpha, kd_temperature = float(distill.get('alpha', 0.5)), float(distill.get('temperature', 2.0))
+    blend_aux = bool(distill.get('blend_aux', True))
     best = None
     stale = 0
     global_step = 0
@@ -146,7 +160,7 @@ def train_with_validation(model, loader, device, optimizer, scheduler, epochs,
             if teacher is not None:
                 targets = torch.stack([teacher[uid] for uid in batch['uid']]).to(device)
                 kd = distillation_loss(output['logits'], targets, kd_temperature)
-                loss = (1 - alpha) * loss + alpha * kd
+                loss = blend_distillation(loss, output.get('task_loss'), kd, alpha, blend_aux)
                 window['kd'] += kd.item()
             scaled = loss / group_size
             if scaler is not None:

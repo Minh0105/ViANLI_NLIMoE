@@ -17,7 +17,9 @@ def code(text):
 md("""
 # ViANLI · Lightweight MoE
 
-B0 XLM-R Large · B1 NLIMoE · B2 + STE · B3 + bottleneck · ablations A_topk, A_nobal
+Baselines E0 (B0, XLM-R Large) and E1 (B1, NLIMoE); our experiments E2 (B2, + STE) to E8; ablations A1 to A6.
+The v5 study (14 variants x 3 seeds) is finished; the queue skips finished runs and starts the P2 variants
+of REVISION_PLAN.md: A4 A_mean_ln, A5 A_1exp, A6 B2_safe, E3c B3_res256, E7 B2_cw, E8a B5_kd_ens, E8b B2_kd_ens.
 """)
 
 md("## Setup")
@@ -74,9 +76,10 @@ except Exception:
 md("## Runs")
 code(r"""
 import torch
-VARIANTS = ['B0_base', 'B2_base', 'B5_kd',                  # lightweight: XLM-R Base, distillation
-            'B4_c002', 'B4_c01', 'B2_T005', 'B2_T02', 'B3_r384',
-            'B0', 'B1', 'B2', 'B3', 'A_topk', 'A_nobal']   # finished runs are skipped
+from scripts.run_queue import P2_VARIANTS, V5_VARIANTS, TEACHERS
+# P2 first (confound ablations, residual bottleneck, class weights, ensemble distillation); finished runs are skipped
+VARIANTS = ['A_mean_ln', 'A_1exp', 'B3_res256', 'B2_cw', 'B2_safe', 'B5_kd_ens', 'B2_kd_ens'] + V5_VARIANTS
+assert set(VARIANTS) >= set(P2_VARIANTS)
 SEEDS = [42, 123, 2026]
 PRECISION = 'auto'
 
@@ -93,10 +96,14 @@ QUEUE_ARGS = ['--variants', *VARIANTS, '--seeds', *map(str, SEEDS), '--precision
 !python scripts/run_queue.py {' '.join(QUEUE_ARGS)} --dry_run
 """)
 code(r"""
-# B5_kd learns from the B2 (XLM-R Large) models: save their logits on the training set once
-TEACHER = 'results/teacher/B2_large.pt'
-if 'B5_kd' in VARIANTS and not os.path.exists(TEACHER):
-    !python scripts/dump_teacher_logits.py --variants B2 --seeds 42 123 2026 --out {TEACHER}
+# distilled variants learn from saved teacher logits on the training set; create each file once
+# B5_kd: mean of the 3 B2 runs; B5_kd_ens, B2_kd_ens: mean of the 6 B0 + B2 runs (needs their checkpoints)
+TEACHER_SOURCES = {'results/teacher/B2_large.pt': 'B2', 'results/teacher/B0_B2_large.pt': 'B0 B2'}
+for teacher in sorted({TEACHERS[v] for v in VARIANTS if v in TEACHERS}):
+    if os.path.exists(teacher):
+        print('teacher exists:', teacher)
+    else:
+        !python scripts/dump_teacher_logits.py --variants {TEACHER_SOURCES[teacher]} --seeds 42 123 2026 --out {teacher}
 """)
 code(r"""
 PID_FILE = 'logs/queue.pid'
@@ -171,11 +178,25 @@ display(viz.expert_parameter_table())
 
 md("## Efficiency")
 code(r"""
-# parameters, MACs per sentence, size fp32 / bf16 / int8, GPU and CPU latency; --int8_accuracy adds a slow CPU test pass
+# parameters, MACs, size fp32 / bf16 / int8, GPU latency of the whole model and of the MoE head (sparse vs dense),
+# peak memory, CPU int8 latency, and test accuracy of each seed-42 checkpoint before / after int8 (slow CPU pass)
 import pandas as pd
 from IPython.display import display
-!python scripts/efficiency.py --variants B0 B2 B0_base B2_base B5_kd
-display(pd.read_csv('results/efficiency.csv').round(2))
+!python scripts/efficiency.py --variants B0 B1 B2 B3 B3_r384 B4_c002 B4_c01 B0_base B2_base B5_kd --int8_accuracy --out results/efficiency.csv
+display(pd.read_csv('results/efficiency.csv').round(3))
+""")
+
+md("## Analysis")
+code(r"""
+# tables, clustered bootstrap / ensemble McNemar, routing and C statistics, 36 never-correct sentences,
+# error annotation sheet (120 errors of E2 seed 42) and 300 DPI figures in reports/figures
+!python scripts/analyze_results.py --out_dir reports/generated
+from IPython.display import Markdown
+for name in ('main_results', 'statistical_tests', 'complexity_and_routing'):
+    path = f'reports/generated/{name}.md'
+    if os.path.exists(path):
+        display(Markdown(open(path, encoding='utf-8').read()))
+print(open('reports/generated/analysis_log.md', encoding='utf-8').read())
 """)
 
 md("## Export")
@@ -186,7 +207,7 @@ figures = {'test_accuracy': fig_bar, 'val_accuracy': fig_val, 'train_loss': fig_
            'experts_per_sample': fig_experts, 'grad_wc': fig_grad, 'confusion': fig_cm}
 figures.update({f'routing_{v}': f for v, f in routing_figs.items()})
 for name, figure in figures.items():
-    figure.savefig(f'reports/figures/{name}.png', dpi=200, bbox_inches='tight')
+    figure.savefig(f'reports/figures/{name}.png', dpi=300, bbox_inches='tight')
 table.to_csv('reports/tables/results.csv', index=False, encoding='utf-8-sig')
 viz.mcnemar_table(summary).to_csv('reports/tables/mcnemar.csv', index=False, encoding='utf-8-sig')
 summary.to_csv('reports/tables/all_runs.csv', index=False, encoding='utf-8-sig')

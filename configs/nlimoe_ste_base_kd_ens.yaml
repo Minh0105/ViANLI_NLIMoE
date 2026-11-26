@@ -1,0 +1,65 @@
+# E8a (B5_kd_ens): B5_kd distilled from the E0 + E2 ensemble (6 XLM-R Large runs) instead of E2 alone
+experiment:
+  name: nlimoe_paper_v5_ste_base_kd_ens
+  description: "E8a = B5_kd with the teacher = mean logits of B0 and B2 (6 XLM-R Large runs); otherwise identical to nlimoe_ste_base_kd.yaml"
+
+data:
+  dataset_name: "uitnlp/ViANLI"
+  max_length: 256
+  premise_col: "premise"
+  hypothesis_col: "hypothesis"
+  label_col: "label"
+
+model:
+  architecture: "paper_nlimoe_v3"
+  backbone: "xlm-roberta-base" # d=768
+  expected_hidden_size: 768
+  num_labels: 3
+  pooling: "mean"
+  dropout: 0.4
+  encoder_dropout: null # XLM-R default 0.1; dropout 0.4 only in experts / head
+
+moe:
+  num_experts: 7
+  expert_hidden_dim: 768
+  router_type: "linear"
+  routing_type: "dynamic"
+  top_k: 4 # unused for dynamic routing
+  threshold: 0.1
+  gamma: 0.1
+  dynamic_loss_weight: 0.001
+  balance_loss_weight: 0.01
+  threshold_gradient: "straight_through"
+  threshold_temperature: 0.1 # swept on validation: nlimoe_ste_t005.yaml, nlimoe_ste_t02.yaml
+  expert_type: "linear"
+  empty_selection_policy: "zero" # not reported
+
+training:
+  seed: 42
+  lr_backbone: 1.0e-5
+  lr_moe: 1.0e-5
+  weight_decay: 0.0
+  adam_epsilon: 1.0e-8
+  batch_size: 16
+  epochs: 7
+  eval_frequency: 400
+  scheduler: "linear" # not reported
+  warmup_ratio: 0.1 # not reported
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0 # not reported; Hugging Face Trainer default
+  distill: # loss = (1 - alpha) * loss + alpha * T^2 * KL(teacher_T || student_T)
+    teacher: results/teacher/B0_B2_large.pt # scripts/dump_teacher_logits.py --variants B0 B2 --out results/teacher/B0_B2_large.pt
+    alpha: 0.5
+    temperature: 2.0
+  early_stopping_patience: 0 # not reported
+
+provenance:
+  source: "https://arxiv.org/html/2406.17716v3"
+  architecture: "Section 5, equations 2-16"
+  training: "Section 6.2"
+  unresolved: ["exact checkpoint identifier", "hard-mask gradient estimator", "empty selection", "optimizer class", "scheduler", "seed", "dense baseline head"]
+
+evaluation:
+  primary_metric: "accuracy"
+  secondary_metric: "macro_f1"
+  save_best_checkpoint: true

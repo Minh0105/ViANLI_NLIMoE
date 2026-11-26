@@ -1,17 +1,24 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 import torch
 import torch.nn as nn
 from transformers import AutoModel, AutoConfig
 
 class XLMRobertaNLI(nn.Module):
-    """XLM-R encoder with a linear classification head."""
+    """XLM-R encoder with a linear classification head.
+
+    use_layer_norm=True adds LayerNorm before dropout and the classifier, so that with pooling='mean' the head
+    matches NLIMoE without the MoE block (ablation A4). class_weights weights the cross-entropy per class.
+    Both are off by default (E0, E5a).
+    """
     def __init__(
         self,
         backbone_name: str = "xlm-roberta-base",
         num_labels: int = 3,
         dropout_prob: float = 0.1,
         pooling: str = "cls",
-        encoder_dropout: Optional[float] = None
+        encoder_dropout: Optional[float] = None,
+        use_layer_norm: bool = False,
+        class_weights: Optional[List[float]] = None
     ):
         super().__init__()
         self.backbone_name = backbone_name
@@ -25,9 +32,16 @@ class XLMRobertaNLI(nn.Module):
         self.encoder = AutoModel.from_pretrained(backbone_name, config=self.config)
         self.hidden_size = self.config.hidden_size
 
+        self.use_layer_norm = use_layer_norm
+        if use_layer_norm:
+            self.layer_norm = nn.LayerNorm(self.hidden_size)
         self.dropout = nn.Dropout(dropout_prob)
         self.classifier = nn.Linear(self.hidden_size, num_labels)
-        self.loss_fn = nn.CrossEntropyLoss()
+        if class_weights is not None and len(class_weights) != num_labels:
+            raise ValueError(f"class_weights needs {num_labels} values, got {len(class_weights)}")
+        # not stored in checkpoints, so E0 / E5a checkpoints load unchanged
+        self.register_buffer("class_weights", None if class_weights is None
+                             else torch.tensor(class_weights, dtype=torch.float), persistent=False)
 
     def pool_representation(self, last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
         if self.pooling == "cls":
@@ -51,12 +65,14 @@ class XLMRobertaNLI(nn.Module):
         last_hidden_state = outputs.last_hidden_state
         pooled = self.pool_representation(last_hidden_state, attention_mask)
 
-        dropped = self.dropout(pooled)
+        normed = self.layer_norm(pooled) if self.use_layer_norm else pooled
+        dropped = self.dropout(normed)
         logits = self.classifier(dropped)
 
         loss = None
         if labels is not None:
-            loss = self.loss_fn(logits, labels)
+            weight = None if self.class_weights is None else self.class_weights.to(logits.dtype)
+            loss = nn.functional.cross_entropy(logits, labels, weight=weight)
 
         result = {
             "logits": logits,

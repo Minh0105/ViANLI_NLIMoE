@@ -124,6 +124,31 @@ def evaluate_moe(model, dataloader, device, routing_mode=None, threshold=None):
     return metrics, routing_stats, (all_uids, all_golds, all_preds, all_probs, per_sample)
 
 
+def _model_display_name(cfg, paper_mode, ste):
+    """Readable model column for results/summary.csv, e.g. 'NLIMoE-paper-v3+STE+bottleneck(r=384)+cost0.02'.
+
+    Display only: experiment_name (used by run_queue.is_done and viz.variant_of) is built separately.
+    """
+    if not paper_mode:
+        return "Lightweight-MoE-experimental" if ste else "NLIMoE"
+    moe, training = cfg["moe"], cfg["training"]
+    name = "NLIMoE-paper-v3" + ("+STE" if ste else "")
+    expert_type = moe.get("expert_type", "linear")
+    if expert_type == "bottleneck":
+        name += f"+bottleneck(r={moe.get('bottleneck_dim', 256)})"
+    elif expert_type == "residual_bottleneck":
+        name += f"+res_bottleneck(r={moe.get('bottleneck_dim', 256)})"
+    if float(moe.get("expert_cost_weight", 0.0) or 0.0) > 0:
+        name += f"+cost{moe['expert_cost_weight']}"
+    if moe.get("empty_selection_policy", "zero") != "zero":
+        name += f"+empty_{moe['empty_selection_policy']}"
+    if training.get("class_weights"):
+        name += "+cw" + "/".join(str(w) for w in training["class_weights"])
+    if training.get("distill"):
+        name += "+KD"
+    return name
+
+
 def save_routing_per_sample(path, bundle):
     """Per-sample routing on the test set."""
     uids, golds, preds, _, per_sample = bundle
@@ -306,8 +331,7 @@ def main():
     summary_csv = os.path.join(project_dir, "results", "summary.csv")
     record = {
         "experiment_name": exp_name,
-        "model": (("NLIMoE-paper-v3+STE" + ("+bottleneck" if cfg["moe"].get("expert_type") == "bottleneck" else "")) if ste else "NLIMoE-paper-v3")
-                 if paper_mode else ("Lightweight-MoE-experimental" if ste else "NLIMoE"),
+        "model": _model_display_name(cfg, paper_mode, ste),
         "backbone": backbone,
         "router_type": cfg["moe"].get("router_type", "linear"),
         "routing_type": routing_type,
@@ -329,7 +353,8 @@ def main():
     }
     append_to_summary(record, summary_csv)
     append_history(history_path, {"type": "test", "accuracy": test_metrics["accuracy"], "macro_f1": test_metrics["macro_f1"],
-                                  "avg_experts": test_routing["avg_experts_per_sample"], "train_time": train_time,
+                                  "avg_experts": test_routing["avg_experts_per_sample"],
+                                  "empty_selection_pct": test_routing["empty_selection_pct"], "train_time": train_time,
                                   "inference_time": inference_time, "gpu_mem_gb": peak_mem,
                                   "expert_params": sum(p.numel() for p in model.experts.parameters())})
     print(f"done: {exp_name}")

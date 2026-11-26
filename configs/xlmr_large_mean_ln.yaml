@@ -1,0 +1,45 @@
+# A4 (A_mean_ln): XLM-R Large + mean pooling + LayerNorm, no MoE; separates the head change from MoE + STE
+experiment:
+  name: xlmr_large_mean_ln_paper_v5
+  description: "A4 = E0 with the NLIMoE head minus the MoE block: mean pooling + LayerNorm; everything else identical to xlmr_large.yaml"
+data:
+  dataset_name: uitnlp/ViANLI
+  max_length: 256
+  premise_col: premise
+  hypothesis_col: hypothesis
+  label_col: label
+model:
+  backbone: xlm-roberta-large
+  num_labels: 3
+  pooling: mean
+  use_layer_norm: true # LayerNorm before dropout and classifier, as after the MoE block of NLIMoE
+  dropout: 0.4
+  encoder_dropout: null # XLM-R default 0.1; dropout 0.4 only in experts / head
+training:
+  seed: 42
+  lr: 1.0e-05
+  weight_decay: 0.0
+  adam_epsilon: 1.0e-08
+  batch_size: 16
+  epochs: 7
+  eval_frequency: 400
+  scheduler: "linear" # not reported
+  warmup_ratio: 0.1 # not reported
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0 # not reported; Hugging Face Trainer default
+  early_stopping_patience: 0
+provenance:
+  source: https://arxiv.org/html/2406.17716v3
+  reported: 'Section 6.2: max_length, lr, eval_frequency, batch_size, weight_decay,
+    epsilon, dropout, epochs'
+  assumptions:
+  - CLS plus linear classification head
+  - AdamW
+  - encoder dropout scope
+  - linear learning rate, 10% warmup
+  - best validation accuracy checkpoint
+  - seed 42
+evaluation:
+  primary_metric: accuracy
+  secondary_metric: macro_f1
+  save_best_checkpoint: true

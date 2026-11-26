@@ -126,7 +126,9 @@ def main():
         num_labels=cfg["model"].get("num_labels", 3),
         dropout_prob=cfg["model"].get("dropout", 0.1),
         pooling=cfg["model"].get("pooling", "cls"),
-        encoder_dropout=cfg["model"].get("encoder_dropout")
+        encoder_dropout=cfg["model"].get("encoder_dropout"),
+        use_layer_norm=cfg["model"].get("use_layer_norm", False),
+        class_weights=cfg["training"].get("class_weights")
     ).to(device)
 
     sample_batch = next(iter(train_loader))
@@ -207,7 +209,7 @@ def main():
     summary_csv = os.path.join(project_dir, "results", "summary.csv")
     record = {
         "experiment_name": exp_name,
-        "model": "XLM-R",
+        "model": "XLM-R" + ("+mean" if cfg["model"].get("pooling") == "mean" else "") + ("+LN" if cfg["model"].get("use_layer_norm") else "") + ("+cw" if cfg["training"].get("class_weights") else ""),
         "backbone": backbone,
         "router_type": "none",
         "routing_type": "none",
