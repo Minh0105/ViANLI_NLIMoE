@@ -82,10 +82,45 @@ C của B1 trôi theo hướng khác nhau giữa các seed (do h thay đổi, w_
 - Giả thuyết H1 trên slide ("C tương quan dương với tỷ lệ đoán sai") không đúng về dấu; điều được xác nhận là
   C của B2 có quan hệ đơn điệu, nhất quán với độ khó, còn C của B1 thì không. Độ lớn tương quan nhỏ (|ρ_s| ≤ 0,13).
 
-## Thí nghiệm bổ sung (đang chờ chạy)
+## Thí nghiệm bổ sung (chạy 2026-11-25/26 trên L4, cùng cấu hình v5)
 
-| Biến thể | Config | Thay đổi so với gốc |
-|---|---|---|
-| B2_T005, B2_T02 | nlimoe_ste_t005 / t02 | STE T = 0,05 / 0,2 (T = 0,1 trước đây chưa được dò) |
-| B4_c002, B4_c01 | nlimoe_ste_cost002 / cost01 | B2 + λ · số chuyên gia mỗi câu, λ = 0,02 / 0,1 |
-| B3_r384 | nlimoe_ste_bottleneck384 | B3 với r = 384 (−24,9% tham số khối chuyên gia) |
+Accuracy và macro-F1 trên tập kiểm thử, trung bình ± độ lệch chuẩn qua seed 42 / 123 / 2026:
+
+| Mã | Mô hình | Accuracy (%) | Macro-F1 (%) | Val (%) | Chuyên gia/câu | Từng seed |
+|---|---|---|---|---|---|---|
+| E2 | tham chiếu (T = 0,1) | 45,8 ± 2,2 | 45,6 ± 2,0 | 46,4 | 4,02 | 47,6 / 43,3 / 46,4 |
+| E3b | bottleneck r = 384 | 45,7 ± 2,1 | 44,7 ± 2,1 | 47,2 | 3,65 | 46,9 / 47,0 / 43,3 |
+| E4a | phạt chi phí λ = 0,02 | 45,2 ± 0,7 | 41,9 ± 2,9 | 46,0 | 1,79 | 44,8 / 44,7 / 46,0 |
+| E4b | phạt chi phí λ = 0,1 | 44,7 ± 0,7 | 43,5 ± 2,1 | 47,2 | 1,00 | 44,2 / 44,4 / 45,5 |
+| E5a | XLM-R Base | 43,1 ± 0,9 | 36,7 ± 1,3 | 46,0 | 1 | 42,4 / 42,7 / 44,1 |
+| E5b | XLM-R Base + MoE + STE | 44,5 ± 0,6 | 39,6 ± 3,3 | 45,1 | 3,15 | 43,9 / 44,5 / 45,0 |
+| E6 | E5b chưng cất từ E2 | 44,3 ± 1,0 | 42,9 ± 2,6 | 45,6 | 2,67 | 43,7 / 43,7 / 45,5 |
+| A3a | E2, T = 0,05 | 46,0 ± 0,9 | 45,9 ± 0,7 | 46,4 | 4,25 | 44,9 / 46,6 / 46,4 |
+| A3b | E2, T = 0,2 | 46,0 ± 2,1 | 44,4 ± 1,9 | 46,6 | 3,50 | 44,1 / 48,3 / 45,7 |
+
+McNemar chính xác, gộp 3 seed (3.000 cặp); "thắng" là số seed mà biến thể thứ nhất có accuracy cao hơn:
+
+| So sánh | Chênh | n₀₁ / n₁₀ | p | Thắng |
+|---|---|---|---|---|
+| E3b vs E2 | 0,0 | 398 / 399 | 1,00 | 1/3 |
+| E3b vs E3a | +4,8 | 610 / 467 | < 0,001 | 2/3 |
+| E4a vs E2 | −0,6 | 450 / 468 | 0,57 | 1/3 |
+| E4b vs E2 | −1,1 | 332 / 364 | 0,24 | 1/3 |
+| E5b vs E5a | +1,4 | 283 / 241 | 0,07 | 3/3 |
+| E5b vs E1 | +0,4 | 502 / 491 | 0,75 | 2/3 |
+| E5b vs E0 | −1,3 | 251 / 290 | 0,10 | 1/3 |
+| E6 vs E5b | −0,2 | 375 / 380 | 0,88 | 1/3 |
+| E6 vs E0 | −1,5 | 405 / 449 | 0,14 | 1/3 |
+| A3a vs E2 | +0,2 | 361 / 355 | 0,85 | 1/3 |
+| A3b vs E2 | +0,3 | 390 / 382 | 0,80 | 1/3 |
+
+Ensemble trung bình xác suất 3 seed: E0 49,2%, A3b 49,0%, E2 47,9%, E3b 47,1%, A3a 46,6%, E6 45,1%, E5b 44,5%, E4a 44,5%, E5a 43,4%.
+
+Nhận xét:
+- Nhiệt độ STE: T = 0,05 / 0,1 / 0,2 cho accuracy 46,0 / 45,8 / 46,0, không khác biệt có ý nghĩa; STE không nhạy với T trong khoảng này. Giữ T = 0,1.
+- Bottleneck: r = 384 (−24,9% tham số khối chuyên gia) giữ nguyên accuracy của E2; r = 256 thì không.
+- Phạt chi phí: λ = 0,02 giảm số chuyên gia từ 4,02 xuống 1,79 mỗi câu (−55%), accuracy giảm 0,6 điểm, không có ý nghĩa thống kê. λ = 0,1 đẩy mọi câu về 1 chuyên gia, tức MoE suy biến thành một chuyên gia duy nhất. Macro-F1 của E4a thấp hơn (seed 2026 chỉ dự đoán mâu thuẫn ở 4% số câu).
+- XLM-R Base: MoE + STE thêm 1,4 điểm so với Base thuần (thắng 3/3 seed, p = 0,07) và ngang NLIMoE trên Large (E1, p = 0,75); kém E0 1,3 điểm (p = 0,10).
+- Chưng cất: không thay đổi accuracy so với E5b, nhưng macro-F1 tăng 3,3 điểm và dự đoán cân bằng hơn giữa 3 nhãn (E5a, E5b seed 2026 gần như không dự đoán mâu thuẫn, dưới 0,5% số câu; E6 seed 2026 dự đoán mâu thuẫn 37%).
+- Chi phí: phần encoder của XLM-R Base có khoảng 85 triệu tham số ngoài embedding, so với khoảng 303 triệu của Large, nên số phép nhân-cộng mỗi câu ít hơn khoảng 3,5 lần (ước tính theo tham số, chưa đo độ trễ; xem scripts/efficiency.py).
+- Thời gian huấn luyện trên L4 sau tối ưu (batch 16 × 1, checkpoint ghi một lần, AdamW fused): khoảng 13 phút mỗi lần chạy Large, khoảng 15 phút mỗi lần chạy Base khi 3 job Base chạy cùng lúc.
