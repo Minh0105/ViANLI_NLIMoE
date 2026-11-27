@@ -2,7 +2,7 @@
 
 **Đề tài:** Mixture-of-Experts nhẹ với ngưỡng định tuyến học được cho suy luận ngôn ngữ đối kháng tiếng Việt
 
-- **Tổng thời lượng dự kiến:** khoảng 15 phút cho 31 slide, nói khoảng 130 từ/phút.
+- **Tổng thời lượng dự kiến:** khoảng 16 phút cho 31 slide, nói khoảng 130 từ/phút.
 - **Bản rút gọn 10 phút:** bỏ phần đánh dấu *(có thể lược)*. Slide 8–10 và 30–31 chỉ cần lướt qua.
 - **Ký hiệu:** `[...]` là chỗ cần thay bằng thông tin của nhóm. Chữ trong ngoặc vuông in nghiêng là hành động (*[chỉ vào bảng]*), không đọc thành tiếng.
 - **Mẹo đọc số:** "45,8" đọc là "bốn mươi lăm phẩy tám phần trăm"; "p = 0,05" đọc là "p bằng không phẩy không năm".
@@ -56,7 +56,7 @@ Về công bố liên quan, [đọc thông tin của nhóm, hoặc: "nhóm chưa
 Để chuẩn bị cho đề tài, nhóm đã:
 - Cài đặt lại NLIMoE đúng theo công thức của bài báo, có 20 kiểm tra tự động.
 - Khắc phục hiện tượng mô hình sụp khi huấn luyện qua ba phiên bản cấu hình.
-- Chạy tổng cộng **42 lần**: 14 cấu hình, mỗi cấu hình 3 seed, trên Google Colab.
+- Chạy tổng cộng **63 lần**: 21 cấu hình, mỗi cấu hình 3 seed, trên Google Colab.
 
 ---
 
@@ -165,47 +165,55 @@ Các siêu tham số giữ đúng như bài báo: 7 epoch, batch 16, learning ra
 
 Tài nguyên tính toán là Google Colab với GPU A100 và L4.
 
-### Slide 22 · Thiết kế thí nghiệm (25 giây)
-Tổng hợp lại: **E0 và E1 là hai baseline** của bài báo. E2 là đề xuất chính. E3 đến E6 là các thực nghiệm lightweight. A1 đến A3 là ablation. Tất cả chạy 3 seed, chọn checkpoint trên tập kiểm định, và tập kiểm thử chỉ chạy một lần.
+### Slide 22 · Thiết kế thí nghiệm (30 giây)
+Tổng hợp lại: **E0 và E1 là hai baseline** của bài báo. E2 là đề xuất chính. E3 đến E6 là các thực nghiệm lightweight. E7 thử tăng trọng số nhãn mâu thuẫn, E8 chưng cất từ ensemble. A1 đến A3 là ablation. A4 đến A6 là **đối chứng**: chúng tách riêng phần đóng góp của pooling, của định tuyến và của cách xử lý khi không chọn chuyên gia nào.
+
+Tổng cộng 21 cấu hình, mỗi cấu hình 3 seed, tức 63 lần chạy, tất cả đã xong.
 
 ---
 
-## Phần 6 · Kết quả (khoảng 3 phút)
+## Phần 6 · Kết quả (khoảng 3 phút 30 giây)
 
-### Slide 23 · Kết quả chính (45 giây)
-*[chỉ vào dòng E1]* Khi chạy lại 3 seed, NLIMoE gốc đạt **44,1%**, thấp hơn con số 47,3% của bài báo. Điều này cho thấy con số công bố nằm trong khoảng dao động giữa các seed.
+### Slide 23 · Kết quả chính (50 giây)
+*[chỉ vào dòng E1]* Khi chạy lại 3 seed, NLIMoE gốc đạt **44,1%**, thấp hơn con số 47,3% của bài báo. Con số công bố nằm trong khoảng dao động giữa các seed.
 
-*[chỉ vào dòng E2]* Thêm STE, E2 đạt **45,8%**, hơn E1 **1,7 điểm** và hơn ở cả 3 seed. Macro-F1 cao nhất bảng, 45,6%.
+*[chỉ vào dòng E2]* Thêm STE, E2 đạt **45,8%**, hơn E1 **1,7 điểm** và hơn ở cả 3 seed.
 
-E0 có cùng accuracy nhưng độ lệch chuẩn rất lớn, 4,1 điểm, và 2 trên 3 seed gần như bỏ hẳn nhãn mâu thuẫn. Ablation cho thấy:
-- Top-K không tốt hơn.
-- Bỏ cân bằng tải làm có seed chỉ dùng 1 chuyên gia.
-- Đổi nhiệt độ T không ảnh hưởng.
+*[chỉ vào A4, A5]* Nhưng nhóm muốn trả lời trung thực: cái gì thật sự tạo ra lợi ích? Hai đối chứng cho câu trả lời:
+- **A4** chỉ thêm pooling trung bình và LayerNorm vào XLM-R, không có MoE: đạt 45,7%, macro-F1 ngang E2. Vậy lợi thế macro-F1 của E2 so với E0 chủ yếu đến từ pooling.
+- **A5** dùng đúng một chuyên gia, không định tuyến: cũng 45,7%, và hơn NLIMoE gốc 1,6 điểm.
 
-### Slide 24 · Kết quả lightweight (45 giây)
-Với hướng lightweight:
-- **Bottleneck r = 256** bị giảm mạnh và không ổn định, nên đây là kết quả âm.
-- **r = 384** giữ nguyên accuracy với 25% ít tham số chuyên gia hơn.
-- **Phạt chi phí λ = 0,02** giảm số chuyên gia mỗi câu từ 4 xuống 1,8, tức là **bớt 55%**, accuracy chỉ giảm 0,6 điểm. Đây là điều chỉ làm được nhờ STE: không có STE, mức phạt này không có gradient.
-- **Đổi sang XLM-R Base** với MoE và STE đạt 44,5%, **ngang NLIMoE trên Large**, trong khi encoder ít phép tính hơn khoảng 3,5 lần.
-- **Chưng cất** không tăng accuracy nhưng tăng macro-F1 3,3 điểm.
+Nghĩa là trên ViANLI, bảy chuyên gia có định tuyến **chưa cho thêm accuracy**. Đóng góp của STE nằm ở chỗ khác, nhóm sẽ trình bày ở slide sau.
+
+Các dòng còn lại: tăng trọng số nhãn mâu thuẫn (E7) không giúp, Top-K không tốt hơn, bỏ cân bằng tải làm có seed chỉ dùng 1 chuyên gia, và đổi nhiệt độ T không ảnh hưởng.
+
+### Slide 24 · Kết quả lightweight và chưng cất (50 giây)
+Đây là nơi STE phát huy tác dụng: khi ngưỡng học được, **số chuyên gia trở thành thứ tối ưu được**.
+- **Phạt chi phí λ = 0,02** giảm số chuyên gia mỗi câu từ 4 xuống 1,8, tức **bớt 55%**, accuracy chỉ giảm 0,6 điểm. Không có STE, mức phạt này không có gradient.
+- **Bottleneck r = 256** bị sụp ở một seed. Thêm kết nối tắt (E3c) thì hết sụp, tăng 4,1 điểm, với cùng số tham số.
+- **XLM-R Base** nhanh hơn Large khoảng **2,1 lần trên GPU** và **2,8 lần trên CPU int8**, theo đo thực tế.
+
+*[chỉ vào dòng cuối]* Kết quả tốt nhất là **E8b**: E2 học lại từ ensemble 6 mô hình E0 và E2. E8b đạt **47,3%**, macro-F1 47,0%, và chỉ dùng **2 chuyên gia mỗi câu**, một nửa so với E2. Với Base, E8a đạt 45,6% và ổn định nhất, độ lệch chuẩn chỉ 0,2.
+
+Một điều đáng chú ý: khối MoE chỉ chiếm 2 đến 5% thời gian suy luận. Muốn nhẹ thật thì phải thu nhỏ backbone.
 
 ### Slide 25 · Kiểm định thống kê (45 giây)
-Nhóm dùng kiểm định McNemar trên 3.000 cặp dự đoán gộp từ 3 seed.
-- **E2 so với E1:** p = 0,05, có ý nghĩa ở mức biên, và thắng 3 trên 3 seed.
-- **E4a so với E2:** p = 0,57, tức bớt 55% chuyên gia không làm giảm accuracy một cách có ý nghĩa.
-- **E5b so với E1:** p = 0,75, xác nhận Base cộng MoE ngang NLIMoE trên Large.
+Ba seed của một mô hình được chấm trên cùng 1.000 câu, nên không thể coi 3.000 dự đoán là độc lập. Nhóm dùng **bootstrap theo câu**: lấy mẫu lại các câu, giữ nguyên 3 seed của mỗi câu.
+- **E2 so với E1:** +1,7 điểm, p = 0,05, thắng 3 trên 3 seed. STE có ích ở mức biên.
+- **E8b so với E2:** +1,6 điểm, p = 0,07, thắng 3 trên 3 seed. Gần có ý nghĩa.
+- **E3c so với E3a:** +4,1 điểm, p nhỏ hơn 0,001. Kết nối tắt chữa được sụp.
+- **E4a so với E2:** p = 0,59. Bớt 55% chuyên gia không làm giảm accuracy một cách có ý nghĩa.
 
-Về gradient: E1 bằng 0 ở 525 trên 525 lần đo, E2 khác 0 ở 525 trên 525 lần đo. Tương quan giữa C và việc đoán sai của E2 có cùng dấu và có ý nghĩa ở cả 3 seed. Với E1, dấu tương quan đổi giữa các seed, đúng như dự đoán khi ngưỡng không học.
+Về gradient: E1 bằng 0 ở cả 525 lần đo, mọi biến thể có STE đều khác 0. Với E2, câu khó dùng 4,4 đến 4,7 chuyên gia, câu dễ chỉ 3,1 đến 3,4.
 
 ### Slide 26 · Quan sát về dữ liệu (45 giây)
-Vì sao mọi mô hình đơn dừng ở khoảng 46%? Nhóm phân tích 42 lần chạy và thấy bốn điều:
-- **Nhãn mâu thuẫn rất khó:** recall chỉ 27,9%, và tập train cũng ít câu mâu thuẫn nhất.
-- **Mô hình bất ổn:** hai lần chạy bất kỳ chỉ cho cùng dự đoán 60,7% số câu. Nhưng 96,4% số câu được ít nhất một lần chạy đoán đúng.
-- **36 câu không lần chạy nào đoán đúng:** có thể rất khó, hoặc nhãn có vấn đề.
+Vì sao mô hình đơn chỉ dừng quanh 45 đến 47%? Nhóm phân tích 63 lần chạy và thấy bốn điều:
+- **Nhãn mâu thuẫn rất khó:** recall chỉ khoảng 30%, và tập train cũng ít câu mâu thuẫn nhất.
+- **Mô hình bất ổn:** hai lần chạy bất kỳ chỉ cho cùng dự đoán 62,6% số câu. Nhưng 96,8% số câu được ít nhất một lần chạy đoán đúng.
+- **32 câu không lần chạy nào đoán đúng:** có thể rất khó, hoặc nhãn có vấn đề. Nhóm đang gán kiểu bẫy cho các câu này.
 - **Dữ liệu ít lối tắt:** từ "không" phân bố gần đều giữa ba nhãn.
 
-Kết luận: 46% **chưa phải trần của dữ liệu**. Bỏ phiếu của 42 lần chạy đạt 48,7%, và ensemble 3 seed của E0 đạt 49,2%.
+Kết luận: đây **chưa phải trần của dữ liệu**. Bỏ phiếu 63 lần chạy đạt 48,5%, ensemble E0 đạt 49,2%, và chưng cất ensemble đã đưa một mô hình đơn lên 47,3%.
 
 ---
 
@@ -213,33 +221,33 @@ Kết luận: 46% **chưa phải trần của dữ liệu**. Bỏ phiếu của 
 
 ### Slide 27 · Kế hoạch thời gian (30 giây)
 Kế hoạch gồm sáu giai đoạn.
-- Đến 26/11, nhóm đã xong tái hiện, đề xuất chính và các thực nghiệm lightweight.
-- Từ nay tới hết 30/11: đo độ trễ thật và lượng tử hoá int8, hoàn thiện video.
-- Tháng 12: phân tích lỗi và 36 câu khó, rồi thử chưng cất ensemble và tinh chỉnh trung gian trên ViNLI.
+- Đến 27/11, nhóm đã xong 63 lần chạy, đo độ trễ, int8 và kiểm định bootstrap.
+- Từ nay tới hết 30/11: hoàn thiện video và nộp proposal.
+- Tháng 12: gán kiểu bẫy cho 32 câu khó và 120 lỗi, rồi thử tinh chỉnh trung gian trên ViNLI và chưng cất vào XLM-R Base.
 - Giai đoạn cuối: chạy 3 seed cho cấu hình mới, viết báo cáo.
 
 Nhóm gặp người hướng dẫn [lịch gặp].
 
 ### Slide 28 · Đóng góp (30 giây)
 Đề tài có ba đóng góp:
-1. Một bản **tái hiện NLIMoE có kiểm định**: 42 lần chạy, kiểm định McNemar, mã nguồn công khai.
-2. **Ngưỡng định tuyến học được:** chứng minh và sửa chỗ gradient bị chặn, tăng 1,7 điểm so với NLIMoE gốc.
-3. **MoE nhẹ hơn cho NLI tiếng Việt:** bớt 55% chuyên gia mà không mất accuracy có ý nghĩa, và mô hình Base ngang NLIMoE trên Large.
+1. Một bản **tái hiện NLIMoE có kiểm định**: 63 lần chạy, bootstrap theo câu, các đối chứng tách phần đóng góp, mã nguồn công khai.
+2. **Ngưỡng định tuyến học được:** chứng minh và sửa chỗ gradient bị chặn, tăng 1,7 điểm so với NLIMoE gốc, và câu khó dùng nhiều chuyên gia hơn.
+3. **MoE nhẹ hơn cho NLI tiếng Việt:** bớt 55% chuyên gia mà không mất accuracy có ý nghĩa; chưng cất ensemble đạt 47,3% với 2 chuyên gia mỗi câu.
 
 ### Slide 29 · Kết luận và hướng phát triển (50 giây)
 Thông điệp chính của nhóm: **khi ngưỡng định tuyến học được, chi phí của MoE trở thành thứ điều khiển được.**
 
 Nhóm đã giải quyết ba vấn đề:
 - Ngưỡng không học thì nay đã nhận gradient.
-- Chi phí cố định thì nay giảm được 55% chuyên gia.
-- Kết quả một lần chạy thì nay có 3 seed và kiểm định.
+- Chi phí cố định thì nay giảm được 55% chuyên gia, và mô hình tốt nhất chỉ dùng 2 chuyên gia.
+- Kết quả một lần chạy thì nay có 63 lần chạy, kiểm định và đối chứng.
 
-Giới hạn còn lại không nằm ở kiến trúc mà ở nhãn mâu thuẫn và độ bất ổn khi tinh chỉnh.
+Nhóm cũng nói rõ giới hạn: định tuyến chưa thêm accuracy so với một chuyên gia; lợi ích chính là chi phí. Phần còn lại nằm ở nhãn mâu thuẫn và độ bất ổn khi tinh chỉnh.
 
 Hướng tiếp theo:
-- **Trước báo cáo cuối kỳ:** phân tích 36 câu khó, tăng trọng số nhãn mâu thuẫn, đo độ trễ thật.
-- **Để vượt 47% bằng một mô hình:** chưng cất từ ensemble đã đạt 48–49%.
-- **Hướng tới bài báo:** đưa chuyên gia dạng LoRA vào bên trong encoder, nơi chiếm 99% chi phí tính toán, và mở rộng sang XNLI và ANLI.
+- **Trước báo cáo cuối kỳ:** gán kiểu bẫy cho câu khó và lỗi, kiểm định thêm cho E8b.
+- **Thu hẹp khoảng cách Base và Large:** tinh chỉnh trung gian trên ViNLI, chưng cất ensemble vào Base.
+- **Hướng tới bài báo:** đưa chuyên gia dạng LoRA vào bên trong encoder, nơi chiếm phần lớn chi phí, và mở rộng sang XNLI và ANLI.
 
 ### Slide 30–31 · Tài liệu tham khảo (10 giây)
 Đây là 22 tài liệu tham khảo theo định dạng IEEE, trong đó các tài liệu in đậm năm là công trình trong 5 năm gần đây.
@@ -254,7 +262,7 @@ Cảm ơn thầy cô và các bạn đã lắng nghe. Nhóm rất mong nhận đ
 Gumbel-softmax thêm nhiễu ngẫu nhiên vào lượt xuôi, nên hành vi suy luận khác bài báo. STE giữ nguyên lượt xuôi, nên so sánh với baseline công bằng hơn và chỉ thêm một dòng code. Gumbel-softmax là hướng có thể thử thêm.
 
 **2. "1,7 điểm có đáng kể không?"**
-Mức này có ý nghĩa thống kê ở mức biên (p = 0,05) và lặp lại ở cả 3 seed. Nhưng điểm quan trọng hơn là cơ chế: không có STE, ngưỡng không học được, nên các hướng như phạt chi phí cũng không làm được.
+Theo bootstrap theo câu, mức này có ý nghĩa ở mức biên (p = 0,05) và lặp lại ở cả 3 seed. Nhưng điểm quan trọng hơn là cơ chế: không có STE, ngưỡng không học được, nên phạt chi phí cũng không làm được.
 
 **3. "Vì sao kết quả E1 thấp hơn bài báo?"**
 Bài báo chạy một lần. Độ lệch chuẩn giữa các seed của nhóm là khoảng 2 điểm, nên 47,3% vẫn nằm trong khoảng dao động. Ngoài ra có 7 chi tiết cài đặt không được công bố.
@@ -263,4 +271,7 @@ Bài báo chạy một lần. Độ lệch chuẩn giữa các seed của nhóm 
 Theo công thức ρ = 0,1 + 0,1·C, C cao làm ngưỡng cao và dùng ít chuyên gia. Mô hình học cho câu dễ có C cao, nên thực tế C đóng vai trò điểm "dễ". Câu đoán sai có C thấp hơn và dùng nhiều chuyên gia hơn (4,4–4,7 so với 3,1–3,4).
 
 **5. "Lightweight thật sự nhẹ được bao nhiêu?"**
-Khối MoE chỉ chiếm khoảng 1% chi phí, nên bớt chuyên gia chủ yếu chứng minh khả năng điều khiển chi phí. Phần nhẹ thật đến từ backbone Base: encoder ít phép tính hơn khoảng 3,5 lần (ước tính theo tham số). Độ trễ thật sẽ được đo trước báo cáo cuối kỳ.
+Nhóm đã đo trên GPU L4 và CPU. Khối MoE chỉ chiếm 2–5% thời gian suy luận của Large, nên bớt chuyên gia chủ yếu chứng minh khả năng điều khiển chi phí. Phần nhẹ thật đến từ backbone Base: ít phép tính hơn 3,5 lần, nhanh hơn 2,1 lần trên GPU và 2,8 lần trên CPU int8, mô hình int8 nhỏ hơn khoảng 1,5 lần.
+
+**6. "Một chuyên gia đã đạt 45,7% thì cần MoE làm gì?"**
+Đúng là trên ViANLI, định tuyến chưa thêm accuracy; nhóm báo cáo điều này qua đối chứng A4 và A5. Giá trị của MoE với ngưỡng học được là chi phí điều khiển được theo từng câu: có thể giảm số chuyên gia bằng phạt chi phí, và mô hình tốt nhất E8b chỉ dùng 2 chuyên gia. Hướng tiếp theo là đưa chuyên gia vào trong encoder, nơi việc bớt tính toán có tác động lớn hơn nhiều.

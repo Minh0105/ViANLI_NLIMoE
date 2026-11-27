@@ -192,6 +192,24 @@ class MainAndScriptTests(unittest.TestCase):
         self.assertAlmostEqual(float(blend_distillation(loss, None, kd, 0.5, blend_aux=False)), 1.2)
 
 
+class MonitorTests(unittest.TestCase):
+    def test_queue_state_waits_for_the_process_not_the_old_status_file(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "logs").mkdir()
+            status = lambda *states: (root / "logs" / "queue_status.json").write_text(
+                json.dumps({"queue": [{"variant": "B0", "seed": 42, "state": s} for s in states]}), encoding="utf-8")
+            status("done", "done")  # left by the previous queue
+            with patch.object(viz, "queue_alive", return_value=True):
+                self.assertEqual(viz.queue_state(root), "running")  # new queue still planning
+            with patch.object(viz, "queue_alive", return_value=False):
+                self.assertEqual(viz.queue_state(root), "done")
+                status("done", "pending")
+                self.assertEqual(viz.queue_state(root), "stopped")
+                (root / "logs" / "queue_status.json").unlink()
+                self.assertEqual(viz.queue_state(root), "stopped")
+
+
 class StatisticsTests(unittest.TestCase):
     def test_clustered_bootstrap(self):
         rng = np.random.default_rng(0)

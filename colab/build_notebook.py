@@ -183,8 +183,18 @@ fig_cm.tight_layout(); plt.show()
 display(viz.expert_parameter_table())
 """)
 
+PROJECT_DIR = r"""
+# runs on its own after a runtime restart: mount Drive and enter the project folder
+import os
+PROJECT = globals().get('PROJECT', '/content/drive/MyDrive/ViANLI_NLIMoE')
+if PROJECT.startswith('/content/drive') and not os.path.isdir('/content/drive/MyDrive'):
+    from google.colab import drive
+    drive.mount('/content/drive')
+os.chdir(PROJECT)
+"""
+
 md("## Efficiency")
-code(r"""
+code(PROJECT_DIR + r"""
 # parameters, MACs, size fp32 / bf16 / int8, GPU latency of the whole model and of the MoE head (sparse vs dense),
 # peak memory, CPU int8 latency, and test accuracy of each seed-42 checkpoint before / after int8 (slow CPU pass)
 import pandas as pd
@@ -194,16 +204,17 @@ display(pd.read_csv('results/efficiency.csv').round(3))
 """)
 
 md("## Analysis")
-code(r"""
+code(PROJECT_DIR + r"""
 # tables, clustered bootstrap / ensemble McNemar, routing and C statistics, 36 never-correct sentences,
 # error annotation sheet (120 errors of E2 seed 42) and 300 DPI figures in reports/figures
 !python scripts/analyze_results.py --out_dir reports/generated
-from IPython.display import Markdown
+from IPython.display import Markdown, display
 for name in ('main_results', 'statistical_tests', 'complexity_and_routing'):
     path = f'reports/generated/{name}.md'
     if os.path.exists(path):
         display(Markdown(open(path, encoding='utf-8').read()))
-print(open('reports/generated/analysis_log.md', encoding='utf-8').read())
+if os.path.exists('reports/generated/analysis_log.md'):
+    print(open('reports/generated/analysis_log.md', encoding='utf-8').read())
 """)
 
 md("## Export")

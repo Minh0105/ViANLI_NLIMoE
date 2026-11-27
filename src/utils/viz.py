@@ -296,8 +296,24 @@ def current_run(project=PROJECT):
     return jobs[0] if jobs else (None, None)
 
 
+def queue_state(project=PROJECT):
+    """'running' while the run_queue.py process is alive, else 'done' (every job done or failed) or 'stopped'.
+
+    The process is checked first: a queue that has just started still shows the status file of the previous
+    queue (all 'done') until it has worked out its plan, which must not read as finished.
+    """
+    if queue_alive(project):
+        return "running"
+    status_path = Path(project) / "logs" / "queue_status.json"
+    if status_path.exists():
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+        if all(entry["state"] in ("done", "failed") for entry in status["queue"]):
+            return "done"
+    return "stopped"
+
+
 def monitor(refresh_seconds=60, project=PROJECT, stop_when_idle=True):
-    """Refresh the dashboard of the running job until the queue finishes."""
+    """Refresh the dashboard of the running job until the queue process exits."""
     from IPython.display import clear_output, display
     try:
         while True:
@@ -305,14 +321,12 @@ def monitor(refresh_seconds=60, project=PROJECT, stop_when_idle=True):
             table = queue_table(project)
             if not table.empty:
                 display(table)
-            status_path = Path(project) / "logs" / "queue_status.json"
-            if stop_when_idle and status_path.exists():
-                status = json.loads(status_path.read_text(encoding="utf-8"))
-                if all(entry["state"] in ("done", "failed") for entry in status["queue"]):
-                    print("Hàng đợi đã chạy xong.")
-                    return
-            if not queue_alive(project):
-                print("Hàng đợi không chạy. Chạy ô khởi động hàng đợi; nếu lỗi, xem logs/queue.out.")
+            state = queue_state(project)  # stop_when_idle is kept for old notebooks; an exited queue always ends it
+            if state == "done":
+                print("Hàng đợi đã chạy xong.")
+                return
+            if state == "stopped":
+                print("Hàng đợi không chạy và còn job chưa xong. Chạy ô khởi động hàng đợi; nếu lỗi, xem logs/queue.out.")
                 return
             jobs = running_jobs(project)
             if not jobs:
